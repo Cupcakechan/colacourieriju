@@ -16,12 +16,13 @@ export const CONFIG = {
 
   // --- Player ---
   PLAYER_SPEED: 140, // px/s
-  // BODY box (vs walls/hedges), within the 64×64 frame. Its BOTTOM edge (offY + h) is
-  // where the Iju stops against a wall — a SMALLER h raises that edge so the feet tuck
-  // closer to the bottom hedge. (offY+h was 60; now 50 ≈ ~10px closer.)
-  PLAYER_COLLIDER: { w: 34, h: 28, offX: 15, offY: 22 },
-  // Feet-only box for colliding with object footprints — short, at the base of the frame —
-  // so the Iju can brush past a rock with its head/torso overlapping it (top-down depth).
+  // WALL collider (vs hedges/walls), given as INSETS from each edge of the 64×64 frame.
+  // Each side is an INDEPENDENT dial — changing one never moves the others. A BIGGER inset
+  // pulls that edge inward, letting the Iju tuck closer to the hedge on that side. (Hedge
+  // art sits inset within its tiles, so a few px of inset here closes the gap.)
+  // Derived box: x = [left .. 64-right], y = [top .. 64-bottom].
+  PLAYER_WALL: { top: 30, bottom: 14, left: 24, right: 24 },
+  // Feet-only box (vs object footprints like rocks) and the y-sort anchor, in frame coords.
   PLAYER_FOOT: { w: 34, h: 12, offX: 15, offY: 48 },
 
   // --- Fizz / grading / streak / session — wired in during the jam window ---
@@ -36,7 +37,7 @@ export const CONFIG = {
   SHIFT_SECONDS: 120,
   JUMP_DURATION: 0.4,
 
-  // --- Sprite sheets (assets/sprites/ named `${Anim}_${Dir}.png`; frames auto-detected) ---
+  // --- Sprite sheets (assets/sprites/ named Anim_Dir.png; frames auto-detected) ---
   SPRITE: {
     frameW: 64,
     frameH: 64,

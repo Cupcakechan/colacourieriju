@@ -43,6 +43,7 @@ async function start() {
   const camera = createCamera(map.width, map.height);
   const player = createPlayer(map.width / 2 - 32, map.height / 2 - 32); // start in the map center
   const objects = createObjects(); // placed props/obstacles from CONFIG.OBJECTS
+  const F = CONFIG.SPRITE; // 64×64 frame
 
   // Click anywhere to print that world point to the console — handy for placing objects.
   // Convert from CSS pixels (the element is scaled) back to the fixed 960×540 buffer,
@@ -62,15 +63,16 @@ async function start() {
     if (dt > 0.05) dt = 0.05; // clamp big gaps (backgrounded tab)
 
     player.update(dt, input, map, objects); // map = solid tiles, objects = solid footprints
-    const c = CONFIG.PLAYER_COLLIDER, s = player.state;
-    camera.follow(s.x + c.offX + c.w / 2, s.y + c.offY + c.h / 2);
+    const s = player.state;
+    camera.follow(s.x + F.frameW / 2, s.y + F.frameH / 2); // center on the Iju's frame
 
     ctx.fillStyle = CONFIG.COLORS.bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     map.draw(ctx, camera.cam.x, camera.cam.y);
 
     // y-sort: draw player + objects ordered by feet-Y so nearer things overlap farther ones.
-    const playerFeetY = s.y + c.offY + c.h;
+    const ft = CONFIG.PLAYER_FOOT;
+    const playerFeetY = s.y + ft.offY + ft.h; // the Iju's feet (bottom of the foot box)
     const drawList = objects.items.concat([
       { sortY: playerFeetY, draw: (g, camX, camY) => player.draw(g, camX, camY) },
     ]);

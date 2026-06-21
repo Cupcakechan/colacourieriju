@@ -7,6 +7,16 @@ import { CONFIG } from "./config.js";
 export function createPlayer(startX, startY) {
   const S = CONFIG.SPRITE;
 
+  // Derive the wall-collision box from the per-side insets (config PLAYER_WALL).
+  // Box within the 64×64 frame: x = [left .. frameW-right], y = [top .. frameH-bottom].
+  const W = CONFIG.PLAYER_WALL;
+  const wall = {
+    offX: W.left,
+    offY: W.top,
+    w: S.frameW - W.left - W.right,
+    h: S.frameH - W.top - W.bottom,
+  };
+
   // Load every Anim_Dir sheet; frame count auto-detected from sheet width on load.
   const sheets = {};
   for (const anim of S.anims) {
@@ -35,11 +45,11 @@ export function createPlayer(startX, startY) {
   // would the Iju be blocked if the frame's top-left were at (px, py)? objects is
   // optional so the player still runs without it.
   function blocked(px, py, map, objects) {
-    const c = CONFIG.PLAYER_COLLIDER, tile = map.tile;
+    const c = wall, tile = map.tile;
     const left = px + c.offX, top = py + c.offY;
     const right = left + c.w - 1, bottom = top + c.h - 1;
-    // Tiles (walls/hedges): the BODY box stops at a wall. Its bottom edge (offY+h)
-    // sets how close the Iju can tuck against the bottom hedge — see config.
+    // Tiles (walls/hedges): the WALL box stops at a wall. Tune its per-side insets
+    // (config PLAYER_WALL) to set how close the Iju tucks to each hedge.
     for (let ty = Math.floor(top / tile); ty <= Math.floor(bottom / tile); ty++) {
       for (let tx = Math.floor(left / tile); tx <= Math.floor(right / tile); tx++) {
         if (map.isSolid(tx, ty)) return true;
@@ -75,8 +85,8 @@ export function createPlayer(startX, startY) {
     if (moveX !== 0 && !blocked(p.x + moveX, p.y, map, objects)) p.x += moveX;
     if (moveY !== 0 && !blocked(p.x, p.y + moveY, map, objects)) p.y += moveY;
 
-    // keep the collider inside the map edges
-    const c = CONFIG.PLAYER_COLLIDER, b = map.bounds;
+    // keep the wall box inside the map edges
+    const c = wall, b = map.bounds;
     p.x = Math.max(b.minX - c.offX, Math.min(p.x, b.maxX - c.offX - c.w));
     p.y = Math.max(b.minY - c.offY, Math.min(p.y, b.maxY - c.offY - c.h));
 
@@ -99,16 +109,16 @@ export function createPlayer(startX, startY) {
       ctx.drawImage(sheet.img, fi * S.frameW, 0, S.frameW, S.frameH, sx, sy, S.frameW, S.frameH);
     } else {
       ctx.fillStyle = "#c0463a";
-      ctx.fillRect(sx + 15, sy + 22, 34, 38);
+      ctx.fillRect(sx + 24, sy + 30, 16, 20);
       ctx.fillStyle = "#fff"; ctx.font = "10px monospace"; ctx.textAlign = "center";
       ctx.fillText(p.dir, sx + 32, sy + 44);
     }
     if (CONFIG.OBJECTS && CONFIG.OBJECTS.debugFootprints) {
-      // yellow = body box (walls/hedges), cyan = feet box (objects/rocks)
-      const c = CONFIG.PLAYER_COLLIDER, f = CONFIG.PLAYER_FOOT;
+      // yellow = wall box (hedges/walls), cyan = feet box (objects/rocks)
+      const f = CONFIG.PLAYER_FOOT;
       ctx.lineWidth = 1;
       ctx.strokeStyle = "rgba(240,210,60,0.8)";
-      ctx.strokeRect(Math.floor(p.x + c.offX - camX) + 0.5, Math.floor(p.y + c.offY - camY) + 0.5, c.w - 1, c.h - 1);
+      ctx.strokeRect(Math.floor(p.x + wall.offX - camX) + 0.5, Math.floor(p.y + wall.offY - camY) + 0.5, wall.w - 1, wall.h - 1);
       ctx.strokeStyle = "rgba(80,180,255,0.9)";
       ctx.strokeRect(Math.floor(p.x + f.offX - camX) + 0.5, Math.floor(p.y + f.offY - camY) + 0.5, f.w - 1, f.h - 1);
     }
