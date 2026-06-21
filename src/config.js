@@ -16,7 +16,13 @@ export const CONFIG = {
 
   // --- Player ---
   PLAYER_SPEED: 140, // px/s
-  PLAYER_COLLIDER: { w: 34, h: 38, offX: 15, offY: 22 }, // box within the 64×64 frame
+  // BODY box (vs walls/hedges), within the 64×64 frame. Its BOTTOM edge (offY + h) is
+  // where the Iju stops against a wall — a SMALLER h raises that edge so the feet tuck
+  // closer to the bottom hedge. (offY+h was 60; now 50 ≈ ~10px closer.)
+  PLAYER_COLLIDER: { w: 34, h: 28, offX: 15, offY: 22 },
+  // Feet-only box for colliding with object footprints — short, at the base of the frame —
+  // so the Iju can brush past a rock with its head/torso overlapping it (top-down depth).
+  PLAYER_FOOT: { w: 34, h: 12, offX: 15, offY: 48 },
 
   // --- Fizz / grading / streak / session — wired in during the jam window ---
   FIZZ_MAX: 100,
@@ -49,7 +55,7 @@ export const CONFIG = {
   //   fpW,fpH = the SOLID contact band; centered on the sprite, resting on anchorY
   // placements: where each object sits — x,y is the world TOP-LEFT of its sprite.
   //   Click anywhere in the harness to print a ready-to-paste coord to the console.
-  // debugFootprints: draw a red outline of each footprint so fpW/fpH can be tuned.
+  // debugFootprints: yellow = wall box, cyan = the Iju's foot box, red = object base.
   OBJECTS: {
     debugFootprints: true,
     types: {

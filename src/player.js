@@ -32,18 +32,25 @@ export function createPlayer(startX, startY) {
     return ["E", "SE", "S", "SW", "W", "NW", "N", "NE"][i];
   }
 
-  // would the collider overlap a solid tile OR an object footprint if the frame's
-  // top-left were at (px, py)? objects is optional so the player still runs without it.
+  // would the Iju be blocked if the frame's top-left were at (px, py)? objects is
+  // optional so the player still runs without it.
   function blocked(px, py, map, objects) {
     const c = CONFIG.PLAYER_COLLIDER, tile = map.tile;
     const left = px + c.offX, top = py + c.offY;
     const right = left + c.w - 1, bottom = top + c.h - 1;
+    // Tiles (walls/hedges): the BODY box stops at a wall. Its bottom edge (offY+h)
+    // sets how close the Iju can tuck against the bottom hedge — see config.
     for (let ty = Math.floor(top / tile); ty <= Math.floor(bottom / tile); ty++) {
       for (let tx = Math.floor(left / tile); tx <= Math.floor(right / tile); tx++) {
         if (map.isSolid(tx, ty)) return true;
       }
     }
-    if (objects && objects.blocks(left, top, c.w, c.h)) return true; // tight per-object footprints
+    // Objects (ground props): only the FEET catch a small base footprint, so the Iju
+    // can brush past a rock with its head/torso overlapping it (correct top-down depth).
+    if (objects) {
+      const f = CONFIG.PLAYER_FOOT;
+      if (objects.blocks(px + f.offX, py + f.offY, f.w, f.h)) return true;
+    }
     return false;
   }
 
@@ -95,6 +102,15 @@ export function createPlayer(startX, startY) {
       ctx.fillRect(sx + 15, sy + 22, 34, 38);
       ctx.fillStyle = "#fff"; ctx.font = "10px monospace"; ctx.textAlign = "center";
       ctx.fillText(p.dir, sx + 32, sy + 44);
+    }
+    if (CONFIG.OBJECTS && CONFIG.OBJECTS.debugFootprints) {
+      // yellow = body box (walls/hedges), cyan = feet box (objects/rocks)
+      const c = CONFIG.PLAYER_COLLIDER, f = CONFIG.PLAYER_FOOT;
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(240,210,60,0.8)";
+      ctx.strokeRect(Math.floor(p.x + c.offX - camX) + 0.5, Math.floor(p.y + c.offY - camY) + 0.5, c.w - 1, c.h - 1);
+      ctx.strokeStyle = "rgba(80,180,255,0.9)";
+      ctx.strokeRect(Math.floor(p.x + f.offX - camX) + 0.5, Math.floor(p.y + f.offY - camY) + 0.5, f.w - 1, f.h - 1);
     }
   }
 
