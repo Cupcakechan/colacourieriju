@@ -1,0 +1,17 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #11131a; /* shows through as the letterbox / pillarbox bars */
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#game {
+  display: block;
+  image-rendering: pixelated; /* crisp nearest-neighbor upscaling for pixel art */
+}
