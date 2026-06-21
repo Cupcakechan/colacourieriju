@@ -1,5 +1,6 @@
-// player.js — the Iju courier: position, 8-dir movement, solid-tile collision, animation, sprites.
-// Asset-test scope: idle / walk / jump + facing + tile collision. Fizz/cargo come in the jam window.
+// player.js — the Iju courier: position, 8-dir movement, solid collision, animation, sprites.
+// Asset-test scope: idle / walk / jump + facing + tile AND per-object collision.
+// Fizz/cargo come in the jam window.
 
 import { CONFIG } from "./config.js";
 
@@ -31,8 +32,9 @@ export function createPlayer(startX, startY) {
     return ["E", "SE", "S", "SW", "W", "NW", "N", "NE"][i];
   }
 
-  // would the collider overlap a solid tile if the frame's top-left were at (px, py)?
-  function blocked(px, py, map) {
+  // would the collider overlap a solid tile OR an object footprint if the frame's
+  // top-left were at (px, py)? objects is optional so the player still runs without it.
+  function blocked(px, py, map, objects) {
     const c = CONFIG.PLAYER_COLLIDER, tile = map.tile;
     const left = px + c.offX, top = py + c.offY;
     const right = left + c.w - 1, bottom = top + c.h - 1;
@@ -41,10 +43,11 @@ export function createPlayer(startX, startY) {
         if (map.isSolid(tx, ty)) return true;
       }
     }
+    if (objects && objects.blocks(left, top, c.w, c.h)) return true; // tight per-object footprints
     return false;
   }
 
-  function update(dt, input, map) {
+  function update(dt, input, map, objects) {
     const ax = input.axis();
     const moving = ax.x !== 0 || ax.y !== 0;
 
@@ -59,11 +62,11 @@ export function createPlayer(startX, startY) {
     if (p.jumpTimer > 0) p.jumpTimer -= dt;
 
     // Move one axis at a time and reject a blocked axis — this lets the Iju slide
-    // along a wall instead of sticking when pushing into it diagonally.
+    // along a wall/obstacle instead of sticking when pushing into it diagonally.
     const moveX = vx * CONFIG.PLAYER_SPEED * dt;
     const moveY = vy * CONFIG.PLAYER_SPEED * dt;
-    if (moveX !== 0 && !blocked(p.x + moveX, p.y, map)) p.x += moveX;
-    if (moveY !== 0 && !blocked(p.x, p.y + moveY, map)) p.y += moveY;
+    if (moveX !== 0 && !blocked(p.x + moveX, p.y, map, objects)) p.x += moveX;
+    if (moveY !== 0 && !blocked(p.x, p.y + moveY, map, objects)) p.y += moveY;
 
     // keep the collider inside the map edges
     const c = CONFIG.PLAYER_COLLIDER, b = map.bounds;

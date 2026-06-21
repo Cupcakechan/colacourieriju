@@ -1,5 +1,5 @@
 // config.js — every tunable in one place, so balancing is a one-value change.
-// Gameplay values match GDD §11. MAP/SPRITE sections drive the asset-test harness.
+// Gameplay values match GDD §11. MAP/SPRITE/OBJECTS sections drive the asset-test harness.
 
 export const CONFIG = {
   // --- Resolution & grid ---
@@ -40,6 +40,29 @@ export const CONFIG = {
     idleFps: 8,
     walkFps: 12,
     jumpFps: 14,
+  },
+
+  // --- World objects (rocks, props; later houses/shrines) -------------------
+  // types: the registry — art + footprint per object kind.
+  //   w,h     = sprite draw size (usually the PNG's native size)
+  //   anchorY = sprite-local y where the object meets the ground (its "feet")
+  //   fpW,fpH = the SOLID contact band; centered on the sprite, resting on anchorY
+  // placements: where each object sits — x,y is the world TOP-LEFT of its sprite.
+  //   Click anywhere in the harness to print a ready-to-paste coord to the console.
+  // debugFootprints: draw a red outline of each footprint so fpW/fpH can be tuned.
+  OBJECTS: {
+    debugFootprints: true,
+    types: {
+      // Rock.png is 32×32; its pixels sit at x5–27, y3–24, so the base is ~20 wide
+      // ending near y24. A 20×8 band there collides with the rock and nothing else.
+      rock: { sprite: "assets/sprites/Rock.png", w: 32, h: 32, anchorY: 24, fpW: 20, fpH: 8 },
+    },
+    placements: [
+      { type: "rock", x: 470, y: 300 },
+      { type: "rock", x: 780, y: 320 },
+      { type: "rock", x: 560, y: 500 },
+      { type: "rock", x: 840, y: 470 },
+    ],
   },
 
   // --- Colors ---

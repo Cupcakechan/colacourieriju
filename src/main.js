@@ -1,4 +1,5 @@
-// main.js — ASSET-TEST HARNESS. Loads your Sprite Fusion map and drives the Iju over it.
+// main.js — ASSET-TEST HARNESS. Loads your Sprite Fusion map, places world objects,
+// and drives the Iju over it with tile + per-object collision and y-sorted depth.
 // Gameplay systems (delivery.js / ui.js + fizz, grade, score) stay stubbed for the jam window.
 
 import { CONFIG } from "./config.js";
@@ -6,6 +7,7 @@ import { createInput } from "./input.js";
 import { createPlayer } from "./player.js";
 import { createCamera } from "./camera.js";
 import { loadMap } from "./map.js";
+import { createObjects } from "./objects.js";
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -40,25 +42,46 @@ async function start() {
   const input = createInput();
   const camera = createCamera(map.width, map.height);
   const player = createPlayer(map.width / 2 - 32, map.height / 2 - 32); // start in the map center
+  const objects = createObjects(); // placed props/obstacles from CONFIG.OBJECTS
+
+  // Click anywhere to print that world point to the console — handy for placing objects.
+  // Convert from CSS pixels (the element is scaled) back to the fixed 960×540 buffer,
+  // then add the camera offset to get world coordinates.
+  let lastClick = null;
+  canvas.addEventListener("click", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const sx = (e.clientX - rect.left) * (CONFIG.INTERNAL_W / rect.width);
+    const sy = (e.clientY - rect.top) * (CONFIG.INTERNAL_H / rect.height);
+    lastClick = { x: Math.round(sx + camera.cam.x), y: Math.round(sy + camera.cam.y) };
+    console.log(`object coord (sprite top-left): { type: "rock", x: ${lastClick.x}, y: ${lastClick.y} }`);
+  });
 
   let last = performance.now();
   function frame(now) {
     let dt = (now - last) / 1000; last = now;
     if (dt > 0.05) dt = 0.05; // clamp big gaps (backgrounded tab)
 
-    player.update(dt, input, map); // pass the whole map so the player can read solid tiles
+    player.update(dt, input, map, objects); // map = solid tiles, objects = solid footprints
     const c = CONFIG.PLAYER_COLLIDER, s = player.state;
     camera.follow(s.x + c.offX + c.w / 2, s.y + c.offY + c.h / 2);
 
     ctx.fillStyle = CONFIG.COLORS.bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     map.draw(ctx, camera.cam.x, camera.cam.y);
-    player.draw(ctx, camera.cam.x, camera.cam.y);
 
-    ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(8, 8, 252, 46);
+    // y-sort: draw player + objects ordered by feet-Y so nearer things overlap farther ones.
+    const playerFeetY = s.y + c.offY + c.h;
+    const drawList = objects.items.concat([
+      { sortY: playerFeetY, draw: (g, camX, camY) => player.draw(g, camX, camY) },
+    ]);
+    drawList.sort((a, b) => a.sortY - b.sortY);
+    for (const d of drawList) d.draw(ctx, camera.cam.x, camera.cam.y);
+
+    ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(8, 8, 360, 64);
     ctx.fillStyle = CONFIG.COLORS.text; ctx.font = "11px monospace"; ctx.textAlign = "left";
-    ctx.fillText("ASSET TEST — WASD/Arrows to move, Space to jump", 14, 24);
+    ctx.fillText("ASSET TEST — WASD/Arrows move, Space jump, click = log coord", 14, 24);
     ctx.fillText(`anim: ${s.anim}   dir: ${s.dir}   frame: ${s.frame}`, 14, 40);
+    ctx.fillText(`objects: ${objects.count}   last click: ${lastClick ? lastClick.x + ", " + lastClick.y : "—"}`, 14, 56);
 
     input.endFrame();
     requestAnimationFrame(frame);
