@@ -1,14 +1,13 @@
-// player.js — the Iju courier: position, 8-dir movement, animation state, sprite loading.
-// Asset-test scope: idle / walk / jump + facing. Cargo/fizz logic comes in the jam window.
+// player.js — the Iju courier: position, 8-dir movement, solid-tile collision, animation, sprites.
+// Asset-test scope: idle / walk / jump + facing + tile collision. Fizz/cargo come in the jam window.
 
 import { CONFIG } from "./config.js";
 
 export function createPlayer(startX, startY) {
   const S = CONFIG.SPRITE;
 
-  // Load every Anim_Dir sheet. frames are auto-detected from sheet width on load,
-  // so 8- and 10-frame sheets both work with no per-file config.
-  const sheets = {}; // key `Anim_Dir` -> { img, frames, ready, failed }
+  // Load every Anim_Dir sheet; frame count auto-detected from sheet width on load.
+  const sheets = {};
   for (const anim of S.anims) {
     for (const dir of S.dirs) {
       const key = `${anim}_${dir}`;
@@ -27,12 +26,25 @@ export function createPlayer(startX, startY) {
 
   // screen coords (y down) -> nearest of 8 compass directions
   function dirFromVector(x, y) {
-    const deg = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360; // 0=E, 90=S, 180=W, 270=N
+    const deg = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
     const i = Math.round(deg / 45) % 8;
     return ["E", "SE", "S", "SW", "W", "NW", "N", "NE"][i];
   }
 
-  function update(dt, input, bounds) {
+  // would the collider overlap a solid tile if the frame's top-left were at (px, py)?
+  function blocked(px, py, map) {
+    const c = CONFIG.PLAYER_COLLIDER, tile = map.tile;
+    const left = px + c.offX, top = py + c.offY;
+    const right = left + c.w - 1, bottom = top + c.h - 1;
+    for (let ty = Math.floor(top / tile); ty <= Math.floor(bottom / tile); ty++) {
+      for (let tx = Math.floor(left / tile); tx <= Math.floor(right / tile); tx++) {
+        if (map.isSolid(tx, ty)) return true;
+      }
+    }
+    return false;
+  }
+
+  function update(dt, input, map) {
     const ax = input.axis();
     const moving = ax.x !== 0 || ax.y !== 0;
 
@@ -46,12 +58,17 @@ export function createPlayer(startX, startY) {
     if (input.consumePressed("Space") && p.jumpTimer <= 0) p.jumpTimer = CONFIG.JUMP_DURATION;
     if (p.jumpTimer > 0) p.jumpTimer -= dt;
 
-    // move, then clamp the collider inside the walkable bounds (grass interior)
-    p.x += vx * CONFIG.PLAYER_SPEED * dt;
-    p.y += vy * CONFIG.PLAYER_SPEED * dt;
-    const c = CONFIG.PLAYER_COLLIDER;
-    p.x = Math.max(bounds.minX - c.offX, Math.min(p.x, bounds.maxX - c.offX - c.w));
-    p.y = Math.max(bounds.minY - c.offY, Math.min(p.y, bounds.maxY - c.offY - c.h));
+    // Move one axis at a time and reject a blocked axis — this lets the Iju slide
+    // along a wall instead of sticking when pushing into it diagonally.
+    const moveX = vx * CONFIG.PLAYER_SPEED * dt;
+    const moveY = vy * CONFIG.PLAYER_SPEED * dt;
+    if (moveX !== 0 && !blocked(p.x + moveX, p.y, map)) p.x += moveX;
+    if (moveY !== 0 && !blocked(p.x, p.y + moveY, map)) p.y += moveY;
+
+    // keep the collider inside the map edges
+    const c = CONFIG.PLAYER_COLLIDER, b = map.bounds;
+    p.x = Math.max(b.minX - c.offX, Math.min(p.x, b.maxX - c.offX - c.w));
+    p.y = Math.max(b.minY - c.offY, Math.min(p.y, b.maxY - c.offY - c.h));
 
     // animation state machine: jump overrides, else walk while moving, else idle
     const nextAnim = p.jumpTimer > 0 ? "Jump" : moving ? "Walk" : "Idle";
@@ -71,7 +88,6 @@ export function createPlayer(startX, startY) {
       const fi = p.frame % sheet.frames; // guard if dir changed to a shorter sheet
       ctx.drawImage(sheet.img, fi * S.frameW, 0, S.frameW, S.frameH, sx, sy, S.frameW, S.frameH);
     } else {
-      // placeholder so a missing/not-yet-added sheet is visible, not blank
       ctx.fillStyle = "#c0463a";
       ctx.fillRect(sx + 15, sy + 22, 34, 38);
       ctx.fillStyle = "#fff"; ctx.font = "10px monospace"; ctx.textAlign = "center";

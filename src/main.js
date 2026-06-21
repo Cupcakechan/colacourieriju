@@ -21,7 +21,6 @@ function fitToWindow() {
 window.addEventListener("resize", fitToWindow);
 fitToWindow();
 
-// loading note while the map fetch + image load resolve
 ctx.fillStyle = CONFIG.COLORS.bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
 ctx.fillStyle = CONFIG.COLORS.text; ctx.font = "14px monospace"; ctx.textAlign = "center";
 ctx.fillText("loading map…", canvas.width / 2, canvas.height / 2);
@@ -47,7 +46,7 @@ async function start() {
     let dt = (now - last) / 1000; last = now;
     if (dt > 0.05) dt = 0.05; // clamp big gaps (backgrounded tab)
 
-    player.update(dt, input, map.bounds);
+    player.update(dt, input, map); // pass the whole map so the player can read solid tiles
     const c = CONFIG.PLAYER_COLLIDER, s = player.state;
     camera.follow(s.x + c.offX + c.w / 2, s.y + c.offY + c.h / 2);
 
