@@ -63,13 +63,20 @@ export const CONFIG = {
       // Rock.png is 32×32; its pixels sit at x5–27, y3–24, so the base is ~20 wide
       // ending near y24. A 20×8 band there collides with the rock and nothing else.
       rock: { sprite: "assets/sprites/Rock.png", w: 32, h: 32, anchorY: 24, fpW: 20, fpH: 8 },
-    },
-    placements: [
-      { type: "rock", x: 470, y: 300 },
+    temple:   { sprite: "assets/sprites/temple.png",   w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
+    teahouse: { sprite: "assets/sprites/teahouse.png", w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
+
+},
+      
+      placements: [
+      { type: "rock", x: 566, y: 168 },
       { type: "rock", x: 780, y: 320 },
       { type: "rock", x: 560, y: 500 },
       { type: "rock", x: 840, y: 470 },
+      { type: "temple", x:797, y:151 },
+      {type: "teahouse", x:289, y:217},
     ],
+    
   },
 
   // --- Colors ---

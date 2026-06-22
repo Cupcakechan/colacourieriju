@@ -1,7 +1,7 @@
 # Cola Courier: Iju — Game Design Document
 
 > **Status:** living source of truth. Jam build doc, kept lean on purpose.
-> **Last updated:** 2026-06-20 · Pre-jam planning (no code yet)
+> **Last updated:** 2026-06-22 · Pre-jam — asset-test harness built (Sprite Fusion map, 8-dir Iju, object system, tile + footprint collision); gameplay systems still stubbed for the jam window.
 > **One-liner:** A yokai cola courier sprints through a misty mountain town keeping the fizz settled — deliver clean, deliver fast, you can't do both.
 
 ---
@@ -152,7 +152,7 @@ One system per pass, in rough priority order:
 
 **Stack:** plain HTML / CSS / JS / Canvas. **ES modules** (`<script type="module">`), no build step. Local dev via `npx serve` (Node-based; no Python). Deploy: zipped static files to itch.io (served over https — modules work there).
 
-**Map:** tileset workflow. 32×32 tiles authored as a tileset (ground + transitions) + prop/building sprites layered on top. Map laid out in a tilemap editor (Sprite Fusion / PixLab / Tiled) and **exported as JSON** the engine reads. Collision is per-tile (flag solid tile indices) + per-object rectangles — reliable and reroutable, which matters for the Theme-2 pivot.
+**Map:** tileset workflow. 32×32 tiles authored as a tileset (ground + transitions) + prop/building sprites layered on top. Map laid out in a tilemap editor (Sprite Fusion / PixLab / Tiled) and **exported as JSON** the engine reads. Collision is per-tile for walls/hedges (flag solid tile indices) plus tight per-object **footprints** for props/buildings (a base band, not the whole sprite), with objects **y-sorted** against the player so the Iju passes behind taller structures — reliable and reroutable, which matters for the Theme-2 pivot.
 
 **Module split** (one responsibility each):
 
@@ -172,12 +172,13 @@ cola-courier-iju/
 │   ├── camera.js       follow + clamp to map bounds
 │   ├── map.js          tile data load/render + collision
 │   ├── delivery.js     pickup/dropoff, grade, score, streak
+│   ├── objects.js      placed props/buildings: registry, footprint collision, y-sort
 │   └── ui.js           fizz bar, score, grade popup, destination arrow
 └── assets/
     ├── sprites/  tiles/  audio/
 ```
 
-**Map prototype size:** 48×32 tiles = 1536×1024 px (≈1.6× viewport wide, ≈1.9× tall) → short, snappy routes. Scale up later if needed.
+**Town map size:** ≈64×48 tiles = ≈2048×1536 px (≈2.1× viewport wide, ≈2.8× tall) — sized up from the original 48×32 prototype so the larger (2×) buildings fit with room for tight routes between them. Tiles stay 32px; the Iju and the props/buildings carry the scale. Working size — nudge as the town layout settles.
 
 Rough zone sketch (final layout decided during build):
 
@@ -216,9 +217,10 @@ All placeholders — tuned during playtest; balancing should never require touch
 |---|---|---|
 | `INTERNAL_W × INTERNAL_H` | 960 × 540 | logical resolution |
 | `TILE` | 32 | px |
-| `MAP_TILES` | 48 × 32 | → 1536 × 1024 px |
+| `MAP_TILES` | ≈64 × 48 | → ≈2048 × 1536 px (town map; tiles stay 32px) |
 | `PLAYER_SPEED` | 140 | px/s |
-| `PLAYER_COLLIDER` | 34 × 38 @ (15,22) | within the 64×64 frame |
+| `PLAYER_WALL` (insets) | top 30 · bottom 14 · left 24 · right 24 | vs hedges/walls; each side an independent dial within the 64×64 frame |
+| `PLAYER_FOOT` | 34 × 12 @ (15,48) | vs object footprints; also the y-sort anchor |
 | `FIZZ_MAX` | 100 | meter ceiling |
 | `FIZZ_RISE_MOVING` | +12 / s | while moving + carrying |
 | `FIZZ_SETTLE_STOPPED` | −18 / s | while stopped + carrying |
@@ -260,13 +262,13 @@ NOW ─────────────► JUL 3 12:00 ───────
 
 ## 14. Asset spec (dimensions — full contract for the art pipeline)
 
-Base grid **32×32**. Sprites authored with the object's base at the bottom of the frame + a small ground shadow (for depth-sorting later). Collision boxes are starting values to tune.
+Base grid **32×32**. **The 64px Iju is the size anchor** — everything else is scaled to read correctly beside it (buildings were doubled from an earlier 128px plan so the courier reads as a small figure in a big town; villagers sit *below* the Iju in height). Sprites authored with the object's base at the bottom of the frame + a small ground shadow (feeds the object system's depth-sort). Collision boxes/footprints are starting values, tuned to the art with the in-engine debug overlay.
 
 | Asset | Pixel size | Frames | Collision (solid) | Notes |
 |---|---|---|---|---|
 | Ground tiles (grass/dirt/stone/wood/shrine/water) | 32×32 | 1 ea + transitions | water solid; paths walkable | Wang/dual-grid sets; must tile seamlessly |
 | Ground overlays (cracks/leaves/cola stain) | 32×32 | 1 | none | decoration |
-| **Iju** idle/walk/jump | 64×64 | ~10 (8 ok) | 34×38 @ (15,22) | **8-dir**, **full bottles only** |
+| **Iju** idle/walk/jump | 64×64 | ~10 (8 ok) | wall insets t30/b14/l24/r24 · foot 34×12 @ (15,48) | **8-dir**, **full bottles only** |
 | **Iju** burst | 64×64 | 10–12 | none | **1-dir (S)** |
 | **Iju** celebrate | 64×64 | 8–10 | none | **1-dir (S)** |
 | Small props (crate/barrel/rock/bush/fence) | 32×32 | 1 | ~28×20 base | fence tileable H+V |
@@ -275,11 +277,11 @@ Base grid **32×32**. Sprites authored with the object's base at the bottom of t
 | Medium props/hazards (stacked crates/stall/well) | 64×64 | 1 | ~64×32 lower | well = relief candidate |
 | Slippery hazard (puddle) | 32×32 | 1 | trigger zone | post-slice |
 | Vending machine (COLA anchor) | 32×64 | 1 (+ glow) | 32×24 base | doubles as vent/relief; 64×64 for a double |
-| NPC villager | 48×48 | 4–6 walk | ~24×18 feet | **4-dir** (mirror W↔E), 2–3 variants |
-| Small house | 128×128 | 1 | ~128×56 lower | roof overhang non-solid |
-| Medium house | 160×128 | 1 | ~160×56 | |
-| Large house/shop | 192×128 | 1 | ~192×56 | |
-| Depot (pickup hub) | 192×128 | 1 | structure solid, bay open | open bay = pickup zone |
+| NPC villager | 48×48 | 4–6 walk | foot band ~24×10 | **4-dir** (mirror W↔E), 2–3 variants; sits below the 64px Iju in height |
+| Small house / shrine / tea house | 256×256 | 1 | base footprint via anchorY/fpW/fpH (temple ref: 235 / 190 / 35) | roof overhang non-solid; y-sorted |
+| Medium house | 320×256 | 1 | base footprint ~240×35, anchorY ~235 (tune to art) | roof overhang non-solid |
+| Large house/shop | 384×256 | 1 | base footprint ~290×35, anchorY ~235 (tune to art) | roof overhang non-solid |
+| Depot (pickup hub) | 384×256 | 1 | structure solid, delivery bay open | open bay = pickup zone |
 | Fizz bar (UI) | code-drawn first | — | — | ~220×22 top; sprite optional later |
 | Destination arrow (UI) | code-drawn first | — | — | ~20px triangle; 24×24 sprite optional |
 | Grade badge (UI) | text first | — | — | 48×24 badge sprites optional |
