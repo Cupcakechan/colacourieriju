@@ -1,7 +1,7 @@
 # Cola Courier: Iju — Project Handoff
 
 > **Purpose:** a session-state snapshot to resume cleanly. The **GDD** (`Cola_Courier_Iju_GDD.md`) is the design source of truth; this doc is *where the build actually stands and what's next*.
-> **Updated:** 2026-06-22 · Pre-jam prep
+> **Updated:** 2026-06-22 · Pre-jam prep — asset-placement tool is the active task
 > **Repo:** https://github.com/Cupcakechan/colacourieriju.git
 
 ---
@@ -30,7 +30,7 @@ The **asset-test harness** is built and working: a Sprite Fusion map loads, the 
 - **Iju = the size anchor, 64px.** Not scaled — pixel art can't shrink crisply except to half (32px), which is too small. Everything else is sized to read next to it.
 - **Buildings draw 1:1 at 256px.** Registry `w/h` must equal the PNG's native size — a smaller box downscales and blurs (this was the tea-house "not crisp" bug). `temple.png` and `teahouse.png` are in; footprints tuned to ≈ `anchorY 235 / fpW 190 / fpH 35`.
 - **Object registry:** `rock` (32), `temple` (256), `teahouse` (256). **Placements** are a scattered *test scene* (4 rocks + temple + tea house), not the final town layout.
-- **Villager:** `Villager1.png`, 48×48, crisp, **single frame** — size is locked; the 4-direction walk sheet is still to author. (Reads ≈84% of the Iju's height; add frame headroom if a clearer gap is wanted.)
+- **Villager:** the 48×48 `Villager1.png` was a temporary **scale-comparison probe** (to eyeball NPC height beside the Iju) and has been **removed** — no villager sprite is committed. The **48×48 sizing decision stands** for the NPC pass (it read ≈84% of the Iju's height, clearly below it); the 4-direction walk sheet is still to author then.
 - **Debug overlay is ON** — flip `debugFootprints` to `false` before shipping.
 
 ## Decisions locked this stretch (don't re-open without reason)
@@ -46,13 +46,18 @@ The **asset-test harness** is built and working: a Sprite Fusion map loads, the 
 - **Build loop:** Claude builds in a sandbox → verifies (`node --check`, logic checks) → zips only the **changed** files with project-relative paths → you extract over the project root, run `npx serve`, test in the browser, then commit with the provided message.
 - **Environment:** Windows, Node/npm, **no Python** — all commands are Windows-friendly single-liners. Dev server is `npx serve` (ES modules need http, not `file://`).
 - **Method:** options-first for non-trivial calls (2–3 named options + a recommendation, then wait); MVP before polish; **one system per pass**, each tested and committed before the next; full files by default; a git checkpoint after each confirmed feature.
-- **Placing objects:** click in the harness → copy the printed `{ type, x, y }` line → paste it into `OBJECTS.placements` in `config.js`.
+- **Placing objects (current):** click in the harness → copy the printed `{ type, x, y }` line → paste it into `OBJECTS.placements` in `config.js`. **Being replaced** by the in-harness placement tool (next step): visual place + one-paste export of the whole list.
+
+---
+
+## Direction note (parked — not yet scoped)
+Daniel's intended gameplay shape, captured for continuity — **not** being built pre-jam: the Iju **picks up** soda, then **traverses the town (and possibly other areas)** to **deliver**, framed as a **starting "level" that opens out into the wider world**. This extends the GDD §3 pickup → deliver → score loop with (a) an intro/start area and (b) multiple traversable zones. Fold into GDD §3 / §12 when we scope it (jam-window, or earlier on Daniel's say-so).
 
 ---
 
 ## Next steps (rough order)
-1. Eyeball the 48px villager next to the Iju in-scene; add a few px of frame headroom if you want a clearer size gap.
-2. Populate the town — more buildings (house / shop / depot at the 2× sizes in GDD §14) and props; lay out tight delivery routes.
-3. Author the villager **4-direction walk sheet** (48px) for the NPC pass.
+1. **Build the in-harness asset-placement tool** (current task) — pick the object type, click to place into the live scene, move/delete, and **export the whole `placements` list in one paste**. Replaces the click-then-hand-copy loop; tooling/scaffold, jam-legal.
+2. **Populate the town** with that tool — more buildings (house / shop / depot at the 2× sizes in GDD §14) and props; lay out tight delivery routes.
+3. Author the villager **4-direction walk sheet** (48px) when the NPC pass begins.
 4. Flip `debugFootprints` **off** once placement and tuning are done.
 5. **Jam window:** build `delivery.js` + `ui.js` — fizz meter, grade, score, streak, shift timer, destination arrow — kept data-driven for the Theme-2 pivot (GDD §8 staged passes, §10 flexibility plan).
