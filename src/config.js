@@ -77,10 +77,11 @@ export const CONFIG = {
     placements: [
       { type: "temple", x: 939, y: 343 },
       { type: "teahouse", x: 685, y: 343 },
-      { type: "mossyrock", x: 1114, y: 754 },
-      { type: "Villager3", x: 1012, y: 740 },
-      { type: "sodahq", x: 1040, y: 540 },
-      { type: "teahouse", x: 789, y: 543 },
+      { type: "mossyrock", x: 1260, y: 800 },
+      { type: "Villager3", x: 1170, y: 536 },
+      { type: "sodahq", x: 314, y: 344 },
+      { type: "yokaihouse", x: 1276, y: 603 },
+      { type: "stonelantern", x: 1207, y: 546 },
     ],
   },
 
