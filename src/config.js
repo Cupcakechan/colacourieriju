@@ -69,12 +69,9 @@ export const CONFIG = {
 },
       
       placements: [
-      { type: "rock", x: 566, y: 168 },
-      { type: "rock", x: 780, y: 320 },
-      { type: "rock", x: 560, y: 500 },
-      { type: "rock", x: 840, y: 470 },
-      { type: "temple", x:797, y:151 },
-      {type: "teahouse", x:289, y:217},
+      { type: "rock", x: 931, y: 553 },
+      { type: "temple", x: 939, y: 343 },
+      { type: "teahouse", x: 685, y: 343 },
     ],
     
   },
