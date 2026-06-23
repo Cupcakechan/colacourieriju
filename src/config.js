@@ -49,31 +49,39 @@ export const CONFIG = {
     jumpFps: 14,
   },
 
-  // --- World objects (rocks, props; later houses/shrines) -------------------
+  // --- World objects (props, buildings) -------------------------------------
   // types: the registry — art + footprint per object kind.
-  //   w,h     = sprite draw size (usually the PNG's native size)
+  //   w,h     = sprite draw size (MUST equal the PNG's native size, or it draws blurry)
   //   anchorY = sprite-local y where the object meets the ground (its "feet")
   //   fpW,fpH = the SOLID contact band; centered on the sprite, resting on anchorY
   // placements: where each object sits — x,y is the world TOP-LEFT of its sprite.
-  //   Click anywhere in the harness to print a ready-to-paste coord to the console.
+  //   Open the editor with [E] to place visually, then [X] to export this block.
   // debugFootprints: yellow = wall box, cyan = the Iju's foot box, red = object base.
   OBJECTS: {
     debugFootprints: true,
     types: {
-      // Rock.png is 32×32; its pixels sit at x5–27, y3–24, so the base is ~20 wide
-      // ending near y24. A 20×8 band there collides with the rock and nothing else.
-      rock: { sprite: "assets/sprites/Rock.png", w: 32, h: 32, anchorY: 24, fpW: 20, fpH: 8 },
-    temple:   { sprite: "assets/sprites/temple.png",   w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
-    teahouse: { sprite: "assets/sprites/teahouse.png", w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
-
-},
-      
-      placements: [
-      { type: "rock", x: 931, y: 553 },
+      // Buildings (256×256): roof overhang non-solid; base band ≈ 190 wide on the 235 line.
+      temple:     { sprite: "assets/sprites/temple.png",     w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
+      teahouse:   { sprite: "assets/sprites/teahouse.png",   w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
+      disheveled: { sprite: "assets/sprites/disheveled.png", w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
+      house1:     { sprite: "assets/sprites/house1.png",     w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
+      yokaihouse: { sprite: "assets/sprites/yokaihouse.png", w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
+      // Large building (384×256): base spans most of the width — GDD large ≈ 290.
+      sodahq:     { sprite: "assets/sprites/sodahq.png",     w: 384, h: 256, anchorY: 235, fpW: 290, fpH: 35 },
+      // Small props (40×40): base band near bottom-center. STARTING values — verify with [B].
+      stonelantern: { sprite: "assets/sprites/stonelantern.png", w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
+      mossyrock:    { sprite: "assets/sprites/mossyrock.png",    w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
+      // Villager (48×48): INTERIM static footprint — becomes a walking NPC in Pass 2.
+      Villager3:    { sprite: "assets/sprites/Villager3.png",    w: 48, h: 48, anchorY: 44, fpW: 24, fpH: 10 },
+    },
+    placements: [
       { type: "temple", x: 939, y: 343 },
       { type: "teahouse", x: 685, y: 343 },
+      { type: "mossyrock", x: 1114, y: 754 },
+      { type: "Villager3", x: 1012, y: 740 },
+      { type: "sodahq", x: 1040, y: 540 },
+      { type: "teahouse", x: 789, y: 543 },
     ],
-    
   },
 
   // --- Colors ---
