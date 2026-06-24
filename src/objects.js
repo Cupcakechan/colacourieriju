@@ -1,9 +1,16 @@
-// objects.js — placed world objects (rocks, props; later houses/shrines).
-// Each object renders ON TOP of the ground and contributes a TIGHT footprint to
-// collision — just its base, not a whole tile. Objects + player are y-sorted in
-// the scene so the Iju passes behind taller objects. Data lives in CONFIG.OBJECTS:
-//   types[name]  = { sprite, w, h, anchorY, fpW, fpH }   // the registry (SHARED by all scenes)
-//   placements[] = { type, x, y }                        // x,y = world top-left of sprite
+// objects.js — placed world objects (props, buildings; ground decals like paths/stains).
+// Each object renders ON TOP of the ground and (if solid) contributes a TIGHT footprint to
+// collision — just its base, not a whole tile. Objects + player are y-sorted in the scene so
+// the Iju passes behind taller objects. Data lives in CONFIG.OBJECTS:
+//   types[name]  = { sprite, w, h, anchorY, fpW, fpH, solid?, ground? }  // registry (SHARED by all scenes)
+//   placements[] = { type, x, y }                                        // x,y = world top-left of sprite
+//
+// solid/ground (both default off the obvious way):
+//   • default            → SOLID + y-sorted (a normal prop/building).
+//   • solid: false       → no collision, still y-sorted (a walk-BEHIND prop, e.g. a tall banner).
+//   • ground: true       → a flat GROUND DECAL: draws beneath every y-sorted entity and never
+//                          collides (implies non-solid). This is how stone paths / stains /
+//                          fallen leaves get placed via the editor without blocking movement.
 //
 // createObjects(placements) takes an OPTIONAL placement list so each scene can have its own
 // objects (town uses CONFIG.OBJECTS.placements by default; pickup passes CONFIG.PICKUP.placements).
@@ -11,6 +18,10 @@
 // and rebuild() regenerates the draw + collision data.
 
 import { CONFIG } from "./config.js";
+
+// Ground decals sort by their own feet line MINUS this bias, so they always land below every
+// entity (whose sortY is a real world-Y, ~0..map height) while still layering among themselves.
+const GROUND_SORT_BIAS = 100000;
 
 export function createObjects(placementsInput) {
   const O = CONFIG.OBJECTS || { types: {}, placements: [] };
@@ -51,15 +62,28 @@ export function createObjects(placementsInput) {
       const rec = spriteFor(def);
       const x = place.x, y = place.y;
 
-      const foot = {
-        x: x + def.w / 2 - def.fpW / 2,
-        y: y + def.anchorY - def.fpH,
-        w: def.fpW,
-        h: def.fpH,
-      };
-      solids.push(foot);
+      // A `ground` decal is flat and never collides. Anything else is solid UNLESS it opts out
+      // with solid:false. (Ground implies non-solid, so it wins regardless of a stray solid flag.)
+      const isGround = def.ground === true;
+      const isSolid = def.solid !== false && !isGround;
 
-      const sortY = y + def.anchorY; // feet (contact line) decide draw order
+      // Only solids carry a footprint into collision.
+      let foot = null;
+      if (isSolid) {
+        foot = {
+          x: x + def.w / 2 - def.fpW / 2,
+          y: y + def.anchorY - def.fpH,
+          w: def.fpW,
+          h: def.fpH,
+        };
+        solids.push(foot);
+      }
+
+      // Draw order = feet line. Ground decals subtract the big bias so they sit under all entities;
+      // anchorY may be omitted on a flat decal, so fall back to the sprite bottom for ordering.
+      const contactY = y + (def.anchorY ?? def.h);
+      const sortY = isGround ? contactY - GROUND_SORT_BIAS : contactY;
+
       items.push({
         sortY,
         draw(ctx, camX, camY) {
@@ -67,10 +91,10 @@ export function createObjects(placementsInput) {
           if (rec && rec.ready) {
             ctx.drawImage(rec.img, sx, sy, def.w, def.h);
           } else {
-            ctx.fillStyle = "#7a7f8a"; // placeholder block until the real sprite loads
+            ctx.fillStyle = isGround ? "#5b6b4a" : "#7a7f8a"; // ground gets a flatter tint while art loads
             ctx.fillRect(sx, sy, def.w, def.h);
           }
-          if (O.debugFootprints) { // outline the solid base so fpW/fpH can be tuned to the art
+          if (foot && O.debugFootprints) { // only solids have a footprint to outline
             ctx.strokeStyle = "rgba(216,58,46,0.9)";
             ctx.lineWidth = 1;
             ctx.strokeRect(
@@ -86,6 +110,7 @@ export function createObjects(placementsInput) {
   }
 
   // Does a collider box overlap any object footprint? (AABB, half-open intervals.)
+  // Ground/non-solid objects aren't in `solids`, so they're transparent to movement.
   function blocks(left, top, w, h) {
     for (const r of solids) {
       if (left < r.x + r.w && left + w > r.x && top < r.y + r.h && top + h > r.y) return true;
@@ -100,7 +125,7 @@ export function createObjects(placementsInput) {
       const def = types[place.type];
       if (!def) continue;
       if (wx >= place.x && wx <= place.x + def.w && wy >= place.y && wy <= place.y + def.h) {
-        const sortY = place.y + def.anchorY;
+        const sortY = place.y + (def.anchorY ?? def.h); // guard decals with no anchorY (no NaN)
         if (!best || sortY > best.sortY) best = { place, sortY };
       }
     }
