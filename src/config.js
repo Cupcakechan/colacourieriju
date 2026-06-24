@@ -78,6 +78,8 @@ export const CONFIG = {
       mossyrock:    { sprite: "assets/sprites/mossyrock.png",    w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
       crates:    { sprite: "assets/sprites/crates.png",    w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
       colacrate:    { sprite: "assets/sprites/colacrate.png",    w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
+      trappedsoul:    { sprite: "assets/sprites/trappedsoul.png",    w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
+      table:    { sprite: "assets/sprites/table.png",    w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
 
       // Ground decal: walkable + drawn under everything. Place paths freely with the editor.
       stonepath:    { sprite: "assets/sprites/stonepath.png",    w: 32, h: 32, ground: true },
