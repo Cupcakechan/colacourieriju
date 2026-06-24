@@ -1,5 +1,5 @@
 // config.js — every tunable in one place, so balancing is a one-value change.
-// Gameplay values match GDD §11. MAP/SPRITE/OBJECTS/NPCS sections drive the asset-test harness.
+// Gameplay values match GDD §11. MAP/SPRITE/OBJECTS/NPCS/PICKUP/DOORS drive the asset-test harness.
 
 export const CONFIG = {
   // --- Resolution & grid ---
@@ -50,11 +50,11 @@ export const CONFIG = {
   },
 
   // --- World objects (props, buildings) -------------------------------------
-  // types: the registry — art + footprint per object kind.
+  // types: the registry — art + footprint per object kind (SHARED across all scenes).
   //   w,h     = sprite draw size (MUST equal the PNG's native size, or it draws blurry)
   //   anchorY = sprite-local y where the object meets the ground (its "feet")
   //   fpW,fpH = the SOLID contact band; centered on the sprite, resting on anchorY
-  // placements: where each object sits — x,y is the world TOP-LEFT of its sprite.
+  // placements: the TOWN's objects — x,y is the world TOP-LEFT of each sprite.
   //   Open the editor with [E] to place visually, then [X] to export this block.
   // debugFootprints: yellow = wall box, cyan = the Iju's foot box, red = object base, magenta = NPC foot.
   OBJECTS: {
@@ -90,32 +90,51 @@ export const CONFIG = {
     path: "assets/sprites/",
     frameW: 48, frameH: 48,
     dirs: ["N", "E", "S", "W"],
-    mirror: { W: "E" },          // draw W as E flipped — no W sheet to author
+    mirror: { W: "E" },
     anims: { Idle: { fps: 6, loop: true }, Walk: { fps: 8, loop: true } },
-    variants: ["villagerA", "villagerB", "villagerC"], // each villager picks one at random
+    variants: ["villagerA", "villagerB", "villagerC"],
     placeholderColors: { villagerA: "#c8a06a", villagerB: "#6a9ec8", villagerC: "#7ac88a" },
-    speed: 45,                   // px/s — an unhurried stroll (the Iju walks at 140)
-    foot: { w: 24, h: 10, offX: 12, offY: 38 }, // collision foot box within the 48×48 frame
-    idleTime: [0.8, 2.5],        // random idle beat (s)
-    walkTime: [0.6, 2.0],        // random walk beat (s)
-    spawns: [                    // start points; villagers wander from here — move to open ground
-      { x: 1170, y: 536 },       // (the old Villager3 spot)
+    speed: 45,
+    foot: { w: 24, h: 10, offX: 12, offY: 38 },
+    idleTime: [0.8, 2.5],
+    walkTime: [0.6, 2.0],
+    spawns: [
+      { x: 1170, y: 536 },
       { x: 760, y: 560 },
       { x: 1010, y: 700 },
     ],
   },
 
   // --- Iju one-shot FX: burst / celebrate (1-direction S, play-once) --------
-  // Triggered by [1]/[2] in the harness to verify playback. Placeholder flashes for
-  // placeholderSeconds until Burst_S.png / Celebrate_S.png exist, then real frames play.
   IJU_FX: {
     path: "assets/sprites/",
-    prefix: "",                  // files are just Burst_S.png / Celebrate_S.png
+    prefix: "",
     frameW: 64, frameH: 64,
     dirs: ["S"],
     anims: { Burst: { fps: 14, loop: false }, Celebrate: { fps: 12, loop: false } },
-    placeholder: { color: "#d83a2e" }, // label falls back to the anim name (Burst / Celebrate)
+    placeholder: { color: "#d83a2e" },
     placeholderSeconds: 0.8,
+  },
+
+  // --- Pickup scene (the depot start) ---------------------------------------
+  // Placeholder room until a real Sprite Fusion export exists; then in scene-pickup.js swap
+  // createPlaceholderMap(PICKUP.map) for loadMap(PICKUP.json, PICKUP.tilesheet) and add them here.
+  PICKUP: {
+    map: { cols: 24, rows: 16, tile: 32, label: "PICKUP (placeholder)" }, // 768×512 room
+    placements: [], // lay out with the editor in this scene, then [X] export into this list
+  },
+
+  // --- Doors: per-scene transition zones -------------------------------------
+  // Each: { rect (world px), to (target scene), spawn (a point in the TARGET scene,
+  // frame TOP-LEFT), label }. Walking the Iju's foot box into rect triggers the swap.
+  // Starting positions — nudge to suit the layouts.
+  DOORS: {
+    pickup: [
+      { rect: { x: 690, y: 216, w: 60, h: 80 }, to: "town", spawn: { x: 470, y: 470 }, label: "to town" },
+    ],
+    town: [
+      { rect: { x: 470, y: 600, w: 70, h: 56 }, to: "pickup", spawn: { x: 96, y: 224 }, label: "to pickup" },
+    ],
   },
 
   // --- Colors ---

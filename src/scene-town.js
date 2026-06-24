@@ -1,11 +1,9 @@
-// scene-town.js — the town scene (former asset-test harness body). Owns its own map +
-// tileset + objects + camera + player + NPCs. Exposes camera/objects/map so the manager's
-// editor can operate on it.
-//
-// Pass 2: wandering villagers + Iju burst/celebrate on [1]/[2].
-// Pass 3: a dummy-state UI TEST BED — scrub keys drive the HUD renderer (ui.js) so every
-// element can be eyeballed at real resolution. No gameplay logic; delivery.js feeds ui.js
-// real state in the jam. Scrub keys: [ ] fizz · G grade · M streak · T pause (shift+T reset) · O arrow.
+// scene-town.js — the town scene. Owns its own map + tileset + objects + camera + player +
+// NPCs, exposes camera/objects/map so the manager's editor can operate on it.
+//   Pass 2: wandering villagers + Iju burst/celebrate on [1]/[2].
+//   Pass 3: a dummy-state UI TEST BED — scrub keys drive the HUD renderer (ui.js).
+//   Pass 4: a door to the pickup scene + an arrival spawn point.
+// Scrub keys: [ ] fizz · G grade · M streak · T pause (shift+T reset) · O arrow.
 
 import { CONFIG } from "./config.js";
 import { createPlayer } from "./player.js";
@@ -15,26 +13,26 @@ import { createObjects } from "./objects.js";
 import { createNpcs } from "./npcs.js";
 import { createAnimator } from "./animator.js";
 import { createUI } from "./ui.js";
+import { createDoorController } from "./doors.js";
 
-// --- UI test-bed constants (dev-only; the real values live in CONFIG / arrive from delivery.js) ---
-const FIZZ_SCRUB = 60;                 // fizz units/sec while [ or ] is held
-const GRADE_POPUP_TIME = 1.5;          // s a grade badge stays up
-const STREAK_MULTS = [1.0, 1.5, 2.0];  // tiers cycled by [M]
-const GRADE_NAMES = ["Perfect", "Good", "Shaken", "Burst"]; // cycled by [G]
-const ARROW_TARGETS = [                // world points cycled by [O] (some off-screen)
+// --- UI test-bed constants (dev-only; real values live in CONFIG / arrive from delivery.js) ---
+const FIZZ_SCRUB = 60;
+const GRADE_POPUP_TIME = 1.5;
+const STREAK_MULTS = [1.0, 1.5, 2.0];
+const GRADE_NAMES = ["Perfect", "Good", "Shaken", "Burst"];
+const ARROW_TARGETS = [
   { x: 506, y: 472 },   // ~ sodahq (shop)
   { x: 1067, y: 471 },  // ~ temple
   { x: 1850, y: 1350 }, // far corner
   { x: 200, y: 200 },   // near origin
 ];
 
-export function createTownScene(/* opts */) {
+export function createTownScene(opts = {}) {
   const F = CONFIG.SPRITE; // 64×64 frame
-  let map = null, camera = null, player = null, objects = null, npcs = null;
-  let ijuFx = null, fxActive = false; // Burst/Celebrate one-shot playback
+  let map = null, camera = null, player = null, objects = null, npcs = null, doors = null;
+  let ijuFx = null, fxActive = false;
   let ui = null;
 
-  // dummy HUD state the scrub keys drive (delivery.js will own the real version)
   const u = {
     fizz: 30, fizzMax: CONFIG.FIZZ_MAX,
     score: 0,
@@ -47,11 +45,13 @@ export function createTownScene(/* opts */) {
   async function load() {
     map = await loadMap(CONFIG.MAP.json, CONFIG.MAP.tilesheet);
     camera = createCamera(map.width, map.height);
-    player = createPlayer(map.width / 2 - 32, map.height / 2 - 32); // start in the map center
-    objects = createObjects();
+    const sp = opts.spawnAt || { x: map.width / 2 - 32, y: map.height / 2 - 32 };
+    player = createPlayer(sp.x, sp.y); // arrive at the gate (or map center when booted directly)
+    objects = createObjects(); // town's own placements (CONFIG.OBJECTS.placements)
     npcs = createNpcs({ map, objects });
     ijuFx = createAnimator(CONFIG.IJU_FX);
     ui = createUI();
+    doors = createDoorController("town");
   }
 
   function update(dt, input) {
@@ -66,9 +66,9 @@ export function createTownScene(/* opts */) {
     if (fxActive) { ijuFx.update(dt); if (ijuFx.isDone()) fxActive = false; }
 
     // --- UI scrub (no gameplay logic) ---
-    if (input.isDown("BracketRight")) u.fizz = Math.min(u.fizzMax, u.fizz + FIZZ_SCRUB * dt); // ] up
-    if (input.isDown("BracketLeft")) u.fizz = Math.max(0, u.fizz - FIZZ_SCRUB * dt);          // [ down
-    if (input.consumePressed("KeyG")) { // pop the next grade badge (and bump score by points × mult)
+    if (input.isDown("BracketRight")) u.fizz = Math.min(u.fizzMax, u.fizz + FIZZ_SCRUB * dt);
+    if (input.isDown("BracketLeft")) u.fizz = Math.max(0, u.fizz - FIZZ_SCRUB * dt);
+    if (input.consumePressed("KeyG")) {
       u.gradeName = GRADE_NAMES[u.gradeIdx];
       u.gradePoints = CONFIG.POINTS[u.gradeName.toLowerCase()] ?? 0;
       u.gradeT = GRADE_POPUP_TIME;
@@ -76,20 +76,25 @@ export function createTownScene(/* opts */) {
       u.gradeIdx = (u.gradeIdx + 1) % GRADE_NAMES.length;
     }
     if (input.consumePressed("KeyM")) u.streakIdx = (u.streakIdx + 1) % STREAK_MULTS.length;
-    if (input.consumePressed("KeyT")) { // T = pause/resume, shift+T = reset
+    if (input.consumePressed("KeyT")) {
       if (input.isDown("ShiftLeft") || input.isDown("ShiftRight")) u.timeLeft = CONFIG.SHIFT_SECONDS;
       else u.paused = !u.paused;
     }
     if (input.consumePressed("KeyO")) u.arrowIdx = (u.arrowIdx + 1) % ARROW_TARGETS.length;
-
     if (!u.paused) u.timeLeft = Math.max(0, u.timeLeft - dt);
     if (u.gradeT > 0) u.gradeT = Math.max(0, u.gradeT - dt);
+
+    // door -> transition request (handled by the manager); only fires once clear of the door
+    const ft = CONFIG.PLAYER_FOOT;
+    const foot = { x: s.x + ft.offX, y: s.y + ft.offY, w: ft.w, h: ft.h };
+    return doors.check(foot);
   }
 
   function draw(ctx) {
     ctx.fillStyle = CONFIG.COLORS.bg;
     ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     map.draw(ctx, camera.cam.x, camera.cam.y);
+    doors.draw(ctx, camera.cam.x, camera.cam.y); // ground-level door zones
 
     const s = player.state;
     const ft = CONFIG.PLAYER_FOOT;
@@ -116,11 +121,11 @@ export function createTownScene(/* opts */) {
       },
     });
 
-    // dev HUD (relocated bottom-left so the fizz bar up top is clear)
+    // dev HUD (bottom-left so the fizz bar up top is clear)
     const bx = 8, bw = 440, bh = 68, by = ctx.canvas.height - bh - 8;
     ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(bx, by, bw, bh);
     ctx.fillStyle = CONFIG.COLORS.text; ctx.font = "11px monospace"; ctx.textAlign = "left";
-    ctx.fillText("DEV — [E] editor   [1]/[2] FX   [ and ] fizz", bx + 6, by + 16);
+    ctx.fillText("DEV — [E] editor   [1]/[2] FX   [ and ] fizz   (walk to a gate → pickup)", bx + 6, by + 16);
     ctx.fillText("G grade   M streak   T pause (shift+T reset)   O arrow", bx + 6, by + 32);
     ctx.fillText(`anim: ${s.anim}   dir: ${s.dir}   frame: ${s.frame}`, bx + 6, by + 48);
     ctx.fillText(`objects: ${objects.count}   villagers: ${npcs.count}`, bx + 6, by + 64);
