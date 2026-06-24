@@ -3,13 +3,18 @@
 // scene, click-drag to move, [Del] to remove, [X] to copy the whole placements list
 // to the clipboard (paste it into OBJECTS.placements in config.js). Pan the camera
 // with WASD/Arrows while editing; [B] toggles the footprint overlay; mouse-wheel
-// scrolls the palette list.
+// scrolls the palette list. HOLD SHIFT while placing or dragging to snap to the grid.
 //
 // PALETTE — drill-down: the panel first shows CATEGORIES; click one to see the objects
 // tagged with it (plus a "‹ back" row). Categories are defined HERE in CATEGORIES (a
 // dev-tool concern, kept out of the gameplay config) — a type not listed in any category
 // falls into a guarded "misc" bucket, so nothing is ever unreachable. The list is built
 // from the LIVE registry, so any type you add to OBJECTS.types appears automatically.
+//
+// SNAP — hold Shift while placing/dragging to lock the object's BASE (its contact point /
+// feet) onto a GRID_SNAP grid. Bases (not top-lefts) snap, so objects of different sizes
+// line up where they sit — which is what reads as a clean row/column in a y-sorted view.
+// A faint grid is drawn while Shift is held so you can see the lattice you're snapping to.
 //
 // Scene-aware: instead of fixed references it reads the ACTIVE scene's camera/objects/map
 // through getScene(), so one editor instance follows whatever scene is current (the
@@ -33,6 +38,7 @@ const FOOTER_H = 34;        // count + status lines under the list
 const PANEL_W = THUMB + 132; // thumbnail + label column
 const PANEL_Y = 10;          // panel top (px from the screen top)
 const WHEEL_STEP = 40;       // px scrolled per wheel notch
+const GRID_SNAP = 16;        // hold-Shift snap grid, world px. Set to 32 to snap to map tiles.
 
 // Category → member type names. PURELY an editor convenience (no gameplay effect), so it
 // lives here, not in config.js. STARTER TAGS — reorder/rename/move freely; it's just data.
@@ -62,6 +68,7 @@ export function createEditor({ canvas, getScene, types }) {
   let dragDX = 0, dragDY = 0;               // grab offset so the object doesn't jump
   let camX = VW / 2, camY = VH / 2;         // free-pan camera CENTER (camera clamps it)
   let msg = "", msgT = 0;                   // transient status line
+  let shiftHeld = false;                    // Shift state, for the snap-grid preview overlay
 
   // palette drill-down state (remembered across [E] toggles)
   let paletteView = "categories";           // "categories" | "types"
@@ -112,6 +119,16 @@ export function createEditor({ canvas, getScene, types }) {
   }
   function backRowRect() {
     return { x: PANEL_X + PANEL_PAD, y: PANEL_Y + HEADER_H, w: PANEL_W - PANEL_PAD * 2, h: BACK_H };
+  }
+
+  // Snap a sprite's TOP-LEFT so its BASE (contact point: center-x, anchorY) lands on the grid.
+  // Ground decals have no anchorY, so the sprite center is the contact point (matches placement).
+  // We snap the base — not the top-left — so different-sized objects align where they sit.
+  function snapToGrid(def, tlx, tly) {
+    const ax = def.w / 2, ay = def.anchorY ?? def.h / 2;
+    const bx = Math.round((tlx + ax) / GRID_SNAP) * GRID_SNAP;
+    const by = Math.round((tly + ay) / GRID_SNAP) * GRID_SNAP;
+    return { x: bx - ax, y: by - ay };
   }
 
   function flash(text) { msg = text; msgT = MSG_TIME; }
@@ -172,8 +189,10 @@ export function createEditor({ canvas, getScene, types }) {
       // anchorY, so fall back to the sprite center — without this guard, `wy - undefined` is
       // NaN and the decal is placed off into NaN-land (counted, but drawn nowhere).
       const def = types[selectedType];
-      selected = sc.objects.add(selectedType, wx - def.w / 2, wy - (def.anchorY ?? def.h / 2));
-      flash(`+${selectedType}`);
+      let tlx = wx - def.w / 2, tly = wy - (def.anchorY ?? def.h / 2);
+      if (e.shiftKey) ({ x: tlx, y: tly } = snapToGrid(def, tlx, tly)); // hold Shift → snap base to grid
+      selected = sc.objects.add(selectedType, tlx, tly);
+      flash(`+${selectedType}${e.shiftKey ? " (snap)" : ""}`);
     } else {
       selected = null;
       return;
@@ -189,7 +208,10 @@ export function createEditor({ canvas, getScene, types }) {
     if (!sc || !sc.objects) return;
     const { sx, sy } = screenFromEvent(e);
     const wx = sx + sc.camera.cam.x, wy = sy + sc.camera.cam.y;
-    sc.objects.moveTo(selected, wx + dragDX, wy + dragDY);
+    let nx = wx + dragDX, ny = wy + dragDY;
+    // hold Shift while dragging → snap the base to the grid (grab offset is ignored while snapping)
+    if (e.shiftKey) ({ x: nx, y: ny } = snapToGrid(types[selected.type], nx, ny));
+    sc.objects.moveTo(selected, nx, ny);
   }
   function onUp() { dragging = false; }
 
@@ -206,6 +228,7 @@ export function createEditor({ canvas, getScene, types }) {
 
   // ---- keyboard: toggle / delete / export / debug ---------------------------
   function onKey(e) {
+    if (e.code === "ShiftLeft" || e.code === "ShiftRight") shiftHeld = true; // track for the snap-grid overlay
     if (e.code === "KeyE") { // toggle editor mode from anywhere
       active = !active;
       if (active) {
@@ -234,6 +257,9 @@ export function createEditor({ canvas, getScene, types }) {
       flash(`debug ${CONFIG.OBJECTS.debugFootprints ? "ON" : "OFF"}`);
       e.preventDefault();
     }
+  }
+  function onKeyUp(e) {
+    if (e.code === "ShiftLeft" || e.code === "ShiftRight") shiftHeld = false;
   }
 
   // Build a paste-able OBJECTS.placements block and copy it to the clipboard.
@@ -265,6 +291,7 @@ export function createEditor({ canvas, getScene, types }) {
   canvas.addEventListener("wheel", onWheel, { passive: false }); // passive:false so we can preventDefault
   window.addEventListener("mouseup", onUp);   // catch mouseup even if it lands off-canvas
   window.addEventListener("keydown", onKey);
+  window.addEventListener("keyup", onKeyUp);  // clear shiftHeld so the snap-grid overlay hides
 
   // ---- per-frame update: pan the camera (the Iju is frozen while editing) ----
   function update(dt, input) {
@@ -286,6 +313,8 @@ export function createEditor({ canvas, getScene, types }) {
     const sc = getScene();
     if (!sc) return;
 
+    if (shiftHeld) drawSnapGrid(ctx, sc); // faint lattice you're snapping to (under the highlight/HUD)
+
     // highlight the grabbed object (world -> screen via the camera offset)
     if (selected) {
       const def = types[selected.type];
@@ -303,7 +332,7 @@ export function createEditor({ canvas, getScene, types }) {
     drawPalette(ctx, sc);
 
     // bottom-left key legend (screen space)
-    const legend = "EDITOR — [E] exit · WASD pan · click = place / drag · [Del] remove · [X] copy · [B] footprints · wheel = scroll";
+    const legend = "EDITOR — [E] exit · WASD pan · click = place / drag · Shift = snap · [Del] remove · [X] copy · [B] footprints · wheel = scroll";
     ctx.font = "11px monospace";
     const lw = ctx.measureText(legend).width;
     ctx.fillStyle = "rgba(0,0,0,0.72)";
@@ -311,6 +340,23 @@ export function createEditor({ canvas, getScene, types }) {
     ctx.fillStyle = CONFIG.COLORS.text;
     ctx.textAlign = "left";
     ctx.fillText(legend, 16, VH - 12);
+  }
+
+  // faint world-space grid (GRID_SNAP spacing), drawn only while Shift is held
+  function drawSnapGrid(ctx, sc) {
+    const camX = sc.camera.cam.x, camY = sc.camera.cam.y;
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = Math.floor(camX / GRID_SNAP) * GRID_SNAP; x <= camX + VW; x += GRID_SNAP) {
+      const px = Math.floor(x - camX) + 0.5;
+      ctx.moveTo(px, 0); ctx.lineTo(px, VH);
+    }
+    for (let y = Math.floor(camY / GRID_SNAP) * GRID_SNAP; y <= camY + VH; y += GRID_SNAP) {
+      const py = Math.floor(y - camY) + 0.5;
+      ctx.moveTo(0, py); ctx.lineTo(VW, py);
+    }
+    ctx.stroke();
   }
 
   // palette panel: header → (back row) → clipped scrolling list → scrollbar → footer
