@@ -1,6 +1,7 @@
 // scene-pickup.js — the depot / pickup scene (the start of the loop). Owns its own map +
-// tileset + objects (the editor works here too) + a door back to the town. No villagers /
-// no UI scrub — that's the town's test bed; this scene proves the scene flow + its own tileset.
+// tileset + objects (the editor works here too) + a door back to the town. Hosts the ambient
+// YOKAI NPC group (the spirits that live in the starting area); no UI scrub — that's the
+// town's test bed. This scene proves the scene flow, its own tileset, and the yokai group.
 //
 // Loads the real depot export (CONFIG.PICKUP.json/tilesheet); if those files aren't present
 // yet it falls back to the code-drawn placeholder room, so the boot never breaks. Lay the
@@ -11,12 +12,13 @@ import { createPlayer } from "./player.js";
 import { createCamera } from "./camera.js";
 import { loadMap } from "./map.js";
 import { createObjects } from "./objects.js";
+import { createNpcs } from "./npcs.js";
 import { createPlaceholderMap } from "./placeholder-map.js";
 import { createDoorController } from "./doors.js";
 
 export function createPickupScene(opts = {}) {
   const F = CONFIG.SPRITE; // 64×64 frame
-  let map = null, camera = null, player = null, objects = null, doors = null;
+  let map = null, camera = null, player = null, objects = null, yokai = null, doors = null;
 
   async function load() {
     const P = CONFIG.PICKUP;
@@ -30,6 +32,7 @@ export function createPickupScene(opts = {}) {
     const sp = opts.spawnAt || { x: map.width / 2 - 32, y: map.height / 2 - 32 };
     player = createPlayer(sp.x, sp.y); // arrive at the gate the manager handed us (or center)
     objects = createObjects(P.placements); // pickup's OWN placements (shared type registry)
+    yokai = createNpcs(CONFIG.YOKAI, { map, objects }); // ambient spirits living in the depot
     doors = createDoorController("pickup", objects); // objects → object-anchored doors (future depot building)
   }
 
@@ -37,6 +40,7 @@ export function createPickupScene(opts = {}) {
     player.update(dt, input, map, objects);
     const s = player.state;
     camera.follow(s.x + F.frameW / 2, s.y + F.frameH / 2);
+    yokai.update(dt); // wander loop only — no bump→fizz/gameplay reaction (jam-window work)
     const ft = CONFIG.PLAYER_FOOT;
     const foot = { x: s.x + ft.offX, y: s.y + ft.offY, w: ft.w, h: ft.h };
     return doors.check(foot); // -> transition request (or null), handled by the manager
@@ -51,7 +55,8 @@ export function createPickupScene(opts = {}) {
     const s = player.state;
     const ft = CONFIG.PLAYER_FOOT;
     const playerFeetY = s.y + ft.offY + ft.h;
-    const drawList = objects.items.concat([
+    // yokai join the y-sort so the Iju passes in front of / behind them by feet line, same as town
+    const drawList = objects.items.concat(yokai.items, [
       { sortY: playerFeetY, draw: (g, camX, camY) => player.draw(g, camX, camY) },
     ]);
     drawList.sort((a, b) => a.sortY - b.sortY);
@@ -62,7 +67,7 @@ export function createPickupScene(opts = {}) {
     ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(bx, by, bw, bh);
     ctx.fillStyle = CONFIG.COLORS.text; ctx.font = "11px monospace"; ctx.textAlign = "left";
     ctx.fillText("DEPOT — walk into the gate → town   ·   [E] editor", bx + 6, by + 16);
-    ctx.fillText(`objects: ${objects.count}`, bx + 6, by + 32);
+    ctx.fillText(`objects: ${objects.count}   yokai: ${yokai.count}`, bx + 6, by + 32);
   }
 
   return {

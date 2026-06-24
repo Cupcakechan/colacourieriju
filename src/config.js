@@ -1,5 +1,5 @@
 // config.js — every tunable in one place, so balancing is a one-value change.
-// Gameplay values match GDD §11. MAP/SPRITE/OBJECTS/NPCS/PICKUP/DOORS drive the asset-test harness.
+// Gameplay values match GDD §11. MAP/SPRITE/OBJECTS/NPCS/YOKAI/PICKUP/DOORS drive the asset-test harness.
 
 export const CONFIG = {
   // --- Resolution & grid ---
@@ -76,6 +76,9 @@ export const CONFIG = {
       // Small props (40×40): base band near bottom-center. STARTING values — verify with [B].
       stonelantern: { sprite: "assets/sprites/stonelantern.png", w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
       mossyrock:    { sprite: "assets/sprites/mossyrock.png",    w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
+      crates:    { sprite: "assets/sprites/crates.png",    w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
+      colacrate:    { sprite: "assets/sprites/colacrate.png",    w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
+
       // Ground decal: walkable + drawn under everything. Place paths freely with the editor.
       stonepath:    { sprite: "assets/sprites/stonepath.png",    w: 32, h: 32, ground: true },
     },
@@ -91,6 +94,7 @@ export const CONFIG = {
   },
 
   // --- NPCs: wandering villagers (built on the shared animator) -------------
+  // Lives in the TOWN. Read by scene-town via createNpcs(CONFIG.NPCS, { map, objects }).
   NPCS: {
     path: "assets/sprites/",
     frameW: 48, frameH: 48,
@@ -107,6 +111,35 @@ export const CONFIG = {
       { x: 1170, y: 536 },
       { x: 760, y: 560 },
       { x: 1010, y: 700 },
+    ],
+  },
+
+  // --- Yokai NPCs: ambient spirits living in the depot/pickup starting area --
+  // A SEPARATE group from the town villagers, but structurally identical (same 48×48 frames,
+  // 4-dir, W←E mirror, Idle/Walk) so it runs on the very same npcs.js + animator.js — only the
+  // data differs. Read by scene-pickup via createNpcs(CONFIG.YOKAI, { map, objects }).
+  //   spawns  = DEPOT-INTERIOR coords. The depot room is ≈768×512 (interior ≈ x32–736 / y32–480,
+  //             smaller than the 960×540 view, so the camera centers it). These are STARTING
+  //             values — tune freely; wandering uses foot-box collision, so a slightly-off spawn
+  //             just idles and re-routes rather than getting stuck.
+  //   sheets  = swap in later by filename (zero code change): assets/sprites/YokaiA_Idle_{Dir}.png
+  //             + YokaiA_Walk_{Dir}.png. Until then each renders as the violet placeholder box.
+  YOKAI: {
+    path: "assets/sprites/",
+    frameW: 48, frameH: 48,
+    dirs: ["N", "E", "S", "W"],
+    mirror: { W: "E" },
+    anims: { Idle: { fps: 6, loop: true }, Walk: { fps: 8, loop: true } },
+    variants: ["YokaiA"],
+    placeholderColors: { YokaiA: "#9a6ac8" }, // violet — clear of the 3 villager tints + the magenta debug box
+    speed: 45,
+    foot: { w: 24, h: 10, offX: 12, offY: 38 },
+    idleTime: [0.8, 2.5],
+    walkTime: [0.6, 2.0],
+    spawns: [
+      { x: 200, y: 180 },
+      { x: 520, y: 200 },
+      { x: 360, y: 320 },
     ],
   },
 

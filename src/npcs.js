@@ -1,12 +1,14 @@
-// npcs.js — wandering villagers (the moving-NPC test bed). Each villager picks a random
-// variant and runs a simple wander loop — idle a random beat, then walk a random direction
-// for a random beat — moving with foot-box collision against tiles + object footprints
-// (the Iju's approach), and y-sorting with everyone else. The bump→fizz reaction is
-// deliberately NOT here; that's jam-window gameplay.
+// npcs.js — a reusable wandering-NPC group (the moving-NPC test bed). The SAME factory drives
+// the town villagers AND the depot yokai — only the data differs. Pass it the group's config
+// block (CONFIG.NPCS or CONFIG.YOKAI) plus the scene's { map, objects }; each NPC picks a random
+// variant from that block and runs a simple wander loop — idle a random beat, then walk a random
+// direction for a random beat — moving with foot-box collision against tiles + object footprints
+// (the Iju's approach), and y-sorting with everyone else. The bump→fizz reaction is deliberately
+// NOT here; that's jam-window gameplay.
 //
-// Placeholder-first: until {variant}_{Anim}_{Dir}.png sheets exist, each villager renders as
-// a labeled colored box that still WANDERS — so movement, collision, and depth are proven
-// now, and real sheets swap in by filename later with zero code change.
+// Placeholder-first: until {variant}_{Anim}_{Dir}.png sheets exist, each NPC renders as a labeled
+// colored box that still WANDERS — so movement, collision, and depth are proven now, and real
+// sheets swap in by filename later with zero code change.
 
 import { CONFIG } from "./config.js";
 import { createAnimator } from "./animator.js";
@@ -14,11 +16,15 @@ import { createAnimator } from "./animator.js";
 const DIR_VEC = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
 const rand = (a, b) => a + Math.random() * (b - a);
 
-export function createNpcs({ map, objects }) {
-  const C = CONFIG.NPCS;
+// config = the group's block (e.g. CONFIG.NPCS for villagers, CONFIG.YOKAI for yokai).
+// Required: passing it explicitly keeps each group's data separate and fails loud here (rather
+// than with a cryptic undefined-read deeper in) if a scene ever wires a call without one.
+export function createNpcs(config, { map, objects }) {
+  if (!config) throw new Error("createNpcs: a config block (e.g. CONFIG.NPCS or CONFIG.YOKAI) is required");
+  const C = config;
   const variants = C.variants || [];
 
-  // one animator per villager (the sheet pixels themselves are cached by URL in animator.js)
+  // one animator per NPC (the sheet pixels themselves are cached by URL in animator.js)
   function makeAnimator(variant, i) {
     return createAnimator({
       path: C.path, prefix: `${variant}_`,
@@ -41,8 +47,8 @@ export function createNpcs({ map, objects }) {
     };
   });
 
-  // foot box of a villager whose frame top-left is (px,py): blocked by a solid tile or an
-  // object footprint? (Villagers don't block each other or the Iju — kept simple for the test.)
+  // foot box of an NPC whose frame top-left is (px,py): blocked by a solid tile or an object
+  // footprint? (NPCs don't block each other or the Iju — kept simple for the test.)
   function blocked(px, py) {
     const f = C.foot;
     const left = px + f.offX, top = py + f.offY;
@@ -54,7 +60,7 @@ export function createNpcs({ map, objects }) {
     return objects.blocks(left, top, f.w, f.h);
   }
 
-  const items = []; // y-sortable drawables, rebuilt each frame (villagers move)
+  const items = []; // y-sortable drawables, rebuilt each frame (NPCs move)
 
   function update(dt) {
     const f = C.foot, b = map.bounds;
@@ -75,8 +81,8 @@ export function createNpcs({ map, objects }) {
       if (n.mode === "walk") {
         const [vx, vy] = DIR_VEC[n.dir];
         const mx = vx * C.speed * dt, my = vy * C.speed * dt;
-        // axis-separated so a villager slides along a wall instead of sticking; if its one
-        // axis is fully blocked it gives up and idles, then later picks a fresh direction.
+        // axis-separated so an NPC slides along a wall instead of sticking; if its one axis is
+        // fully blocked it gives up and idles, then later picks a fresh direction.
         let moved = false;
         if (mx !== 0 && !blocked(n.x + mx, n.y)) { n.x += mx; moved = true; }
         if (my !== 0 && !blocked(n.x, n.y + my)) { n.y += my; moved = true; }
