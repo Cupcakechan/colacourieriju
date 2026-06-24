@@ -141,7 +141,42 @@ Walking the Iju's foot box into the entrance teleports to the target scene. The 
 
 ---
 
-## 9. Common mistakes
+## 9. NPC sprites (villagers & yokai)
+
+NPCs aren't placed with the editor — they're defined in `config.js` (the **`NPCS`** block = town villagers, the **`YOKAI`** block = depot yokai), each with a `variants` list and `spawns`. But their **sprite filenames follow a strict convention** so the animator can find them, and real art swaps in by filename with zero code change.
+
+**Filename pattern:** `{variant}_{Anim}_{Dir}.png`, in `assets/sprites/`.
+
+- **`variant`** — the exact string from the block's `variants` array (case-sensitive):
+  - Villagers: `villagerA`, `villagerB`, `villagerC`
+  - Yokai: `YokaiA`
+- **`Anim`** — `Idle` or `Walk` (capitalized).
+- **`Dir`** — `N`, `E`, or `S` **only**. **W is mirrored from E** (drawn flipped), so you do **not** author a `_W` sheet.
+
+That's **6 sheets per variant** (2 anims × 3 authored dirs).
+
+Villager A:
+```
+villagerA_Idle_N.png   villagerA_Idle_E.png   villagerA_Idle_S.png
+villagerA_Walk_N.png   villagerA_Walk_E.png   villagerA_Walk_S.png
+```
+Yokai A (same shape, different prefix):
+```
+YokaiA_Idle_N.png   YokaiA_Idle_E.png   YokaiA_Idle_S.png
+YokaiA_Walk_N.png   YokaiA_Walk_E.png   YokaiA_Walk_S.png
+```
+
+**Specs:**
+- **48×48** per frame. Frames are auto-detected from sheet width, so each sheet is `frame_count × 48` px wide, frames laid left→right in a single row (e.g. a 6-frame walk = 288×48).
+- Until a sheet exists, the NPC renders as a labeled colored placeholder box that **still wanders** — so spawns/behavior are testable before the art lands. The placeholder color comes from the block's `placeholderColors`.
+
+**Add a new variant** (e.g. a second yokai): add `"YokaiB"` to that block's `variants` array and a color to `placeholderColors`, then drop in `YokaiB_Idle_{N,E,S}.png` + `YokaiB_Walk_{N,E,S}.png`. Each spawn picks a random variant from the list — no other wiring.
+
+> The **Iju's** own sheets (8-direction `{Anim}_{Dir}.png` at 64×64) and its burst/celebrate FX use their own naming — see the GDD asset spec (§14) for those.
+
+---
+
+## 10. Common mistakes
 
 - **Blurry sprite** → `w`/`h` don't match the PNG's native size. Set them to the exact pixels.
 - **Footprint sticks out past the building** → `fpW` is larger than `w`. Keep `fpW` ≤ `w`.
@@ -152,7 +187,7 @@ Walking the Iju's foot box into the entrance teleports to the target scene. The 
 
 ---
 
-## 10. Cheat sheet
+## 11. Cheat sheet
 
 **Editor keys:** `[E]` toggle · click = place · drag = move · **Shift** = snap to grid · `[F]` = toggle collision · `[Del]` = remove · `[X]` = export placements · `[B]` = footprints · wheel = scroll palette · WASD = pan.
 
