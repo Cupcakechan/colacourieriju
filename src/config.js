@@ -5,10 +5,11 @@ export const CONFIG = {
   // --- Resolution & grid ---
   INTERNAL_W: 960,
   INTERNAL_H: 540,
-  TILE: 32, // fallback tile size; the real value is read from map.json
+  TILE: 32, // fallback tile size; the real value is read from each map's json
 
-  // --- Map: a Sprite Fusion export (map.json + its own packed spritesheet) ---
-  // For a new map, drop the export's two files into assets/maps/, replacing these.
+  // --- Town map: a Sprite Fusion export (map.json + its own packed spritesheet) ---
+  // Drop the export's two files into assets/maps/, replacing these. (Town's stone paths were
+  // removed from the tileset — they get placed as walkable ground-decal objects via the editor.)
   MAP: {
     json: "assets/maps/map.json",
     tilesheet: "assets/maps/spritesheet.png",
@@ -16,14 +17,8 @@ export const CONFIG = {
 
   // --- Player ---
   PLAYER_SPEED: 140, // px/s
-  // WALL collider (vs hedges/walls), given as INSETS from each edge of the 64×64 frame.
-  // Each side is an INDEPENDENT dial — changing one never moves the others. A BIGGER inset
-  // pulls that edge inward, letting the Iju tuck closer to the hedge on that side. (Hedge
-  // art sits inset within its tiles, so a few px of inset here closes the gap.)
-  // Derived box: x = [left .. 64-right], y = [top .. 64-bottom].
-  PLAYER_WALL: { top: 30, bottom: 14, left: 24, right: 24 },
-  // Feet-only box (vs object footprints like rocks) and the y-sort anchor, in frame coords.
-  PLAYER_FOOT: { w: 34, h: 12, offX: 15, offY: 48 },
+  PLAYER_WALL: { top: 30, bottom: 14, left: 24, right: 24 }, // wall-collider insets in the 64×64 frame
+  PLAYER_FOOT: { w: 34, h: 12, offX: 15, offY: 48 },         // feet box (vs object footprints) + y-sort anchor
 
   // --- Fizz / grading / streak / session — wired in during the jam window ---
   FIZZ_MAX: 100,
@@ -65,9 +60,9 @@ export const CONFIG = {
       teahouse:   { sprite: "assets/sprites/teahouse.png",   w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
       disheveled: { sprite: "assets/sprites/disheveled.png", w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
       house1:     { sprite: "assets/sprites/house1.png",     w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
-      yokaihouse: { sprite: "assets/sprites/yokaihouse.png", w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
+      yokaisoda:     { sprite: "assets/sprites/yokaihouse.png",     w: 256, h: 256, anchorY: 235, fpW: 290, fpH: 35 },
+
       // Large building (384×256): base spans most of the width — GDD large ≈ 290.
-      sodahq:     { sprite: "assets/sprites/sodahq.png",     w: 384, h: 256, anchorY: 235, fpW: 290, fpH: 35 },
       // Small props (40×40): base band near bottom-center. STARTING values — verify with [B].
       stonelantern: { sprite: "assets/sprites/stonelantern.png", w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
       mossyrock:    { sprite: "assets/sprites/mossyrock.png",    w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
@@ -76,16 +71,12 @@ export const CONFIG = {
       { type: "temple", x: 939, y: 343 },
       { type: "teahouse", x: 685, y: 343 },
       { type: "mossyrock", x: 1260, y: 800 },
-      { type: "sodahq", x: 314, y: 344 },
-      { type: "yokaihouse", x: 1276, y: 603 },
+      { type: "yokaisoda", x: 1276, y: 603 },
       { type: "stonelantern", x: 1207, y: 546 },
     ],
   },
 
   // --- NPCs: wandering villagers (built on the shared animator) -------------
-  // Placeholder-first: until {variant}_{Anim}_{Dir}.png sheets exist, villagers render as
-  // labeled colored boxes that still wander. Sheets are 4-dir N/E/S/W with W MIRRORED from E,
-  // so you author 3 sheets per anim (N/E/S). Frame count auto-detected from sheet width.
   NPCS: {
     path: "assets/sprites/",
     frameW: 48, frameH: 48,
@@ -117,23 +108,27 @@ export const CONFIG = {
   },
 
   // --- Pickup scene (the depot start) ---------------------------------------
-  // Placeholder room until a real Sprite Fusion export exists; then in scene-pickup.js swap
-  // createPlaceholderMap(PICKUP.map) for loadMap(PICKUP.json, PICKUP.tilesheet) and add them here.
+  // Real depot export (24×16 walled room). Files must be named distinctly from the town's
+  // (the town uses map.json / spritesheet.png) — put the depot at assets/maps/depot.json and
+  // assets/maps/depot.png. If those are missing, scene-pickup falls back to the placeholder room.
   PICKUP: {
-    map: { cols: 24, rows: 16, tile: 32, label: "PICKUP (placeholder)" }, // 768×512 room
-    placements: [], // lay out with the editor in this scene, then [X] export into this list
+    json: "assets/maps/depot.json",
+    tilesheet: "assets/maps/depot.png",
+    map: { cols: 24, rows: 16, tile: 32, label: "DEPOT (placeholder)" }, // fallback room (matches export dims)
+    placements: [], // lay out the depot interior with the editor, then [X] export into this list
   },
 
   // --- Doors: per-scene transition zones -------------------------------------
   // Each: { rect (world px), to (target scene), spawn (a point in the TARGET scene,
   // frame TOP-LEFT), label }. Walking the Iju's foot box into rect triggers the swap.
-  // Starting positions — nudge to suit the layouts.
+  // Depot is a walled 24×16 room (interior ≈ x32–736, y32–480). Placeholders — nudge to suit;
+  // the depot door becomes the building's entrance once we do the object-anchored teleporter.
   DOORS: {
     pickup: [
-      { rect: { x: 690, y: 216, w: 60, h: 80 }, to: "town", spawn: { x: 470, y: 470 }, label: "to town" },
+      { rect: { x: 320, y: 416, w: 128, h: 48 }, to: "town", spawn: { x: 470, y: 470 }, label: "to town" },
     ],
     town: [
-      { rect: { x: 470, y: 600, w: 70, h: 56 }, to: "pickup", spawn: { x: 96, y: 224 }, label: "to pickup" },
+      { rect: { x: 470, y: 600, w: 70, h: 56 }, to: "pickup", spawn: { x: 336, y: 224 }, label: "to depot" },
     ],
   },
 
