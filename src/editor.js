@@ -2,7 +2,14 @@
 // Toggle with [E]. Pick a type from the palette, click to place it into the live
 // scene, click-drag to move, [Del] to remove, [X] to copy the whole placements list
 // to the clipboard (paste it into OBJECTS.placements in config.js). Pan the camera
-// with WASD/Arrows while editing; [B] toggles the footprint overlay.
+// with WASD/Arrows while editing; [B] toggles the footprint overlay; mouse-wheel
+// scrolls the palette list.
+//
+// PALETTE — drill-down: the panel first shows CATEGORIES; click one to see the objects
+// tagged with it (plus a "‹ back" row). Categories are defined HERE in CATEGORIES (a
+// dev-tool concern, kept out of the gameplay config) — a type not listed in any category
+// falls into a guarded "misc" bucket, so nothing is ever unreachable. The list is built
+// from the LIVE registry, so any type you add to OBJECTS.types appears automatically.
 //
 // Scene-aware: instead of fixed references it reads the ACTIVE scene's camera/objects/map
 // through getScene(), so one editor instance follows whatever scene is current (the
@@ -19,9 +26,33 @@ const PAN_SPEED = 420; // px/s camera pan while editing (snappier than the Iju's
 const THUMB = 40;      // palette thumbnail cell size, px
 const PANEL_PAD = 8;   // inner padding of the palette panel
 const MSG_TIME = 2.0;  // seconds a status message stays on screen
+const ROW_H = THUMB + 10;   // vertical pitch of a list row (cell + gap)
+const HEADER_H = 24;        // panel title row
+const BACK_H = 22;          // "‹ back" row (types view only)
+const FOOTER_H = 34;        // count + status lines under the list
+const PANEL_W = THUMB + 132; // thumbnail + label column
+const PANEL_Y = 10;          // panel top (px from the screen top)
+const WHEEL_STEP = 40;       // px scrolled per wheel notch
+
+// Category → member type names. PURELY an editor convenience (no gameplay effect), so it
+// lives here, not in config.js. STARTER TAGS — reorder/rename/move freely; it's just data.
+// A type missing from every list shows under "misc". Listing a name that doesn't exist in
+// the registry is harmless (it's simply skipped), so expected-soon props can be pre-listed.
+const CATEGORIES = {
+  buildings: ["temple", "teahouse", "disheveled", "house1", "yokaihouse"],
+  cola:      ["crates", "colacrate", "stackedcolas", "table"],
+  nature:    ["mossyrock", "stonelantern"],
+  ground:    ["stonepath"],
+  deco:      ["trappedsoul"],
+};
+const UNCATEGORIZED = "misc";
+
+const clamp = (v, a, b) => Math.max(a, Math.min(v, b));
 
 export function createEditor({ canvas, getScene, types }) {
   const VW = CONFIG.INTERNAL_W, VH = CONFIG.INTERNAL_H;
+  const PANEL_X = VW - PANEL_W - 10;       // right-anchored
+  const PANEL_MAX_H = VH - PANEL_Y - 44;   // cap height; leaves room for the bottom legend
   const typeNames = Object.keys(types || {});
 
   let active = false;
@@ -32,19 +63,55 @@ export function createEditor({ canvas, getScene, types }) {
   let camX = VW / 2, camY = VH / 2;         // free-pan camera CENTER (camera clamps it)
   let msg = "", msgT = 0;                   // transient status line
 
-  // Palette = a column of cells on the RIGHT edge (buildings are wide, so the left and
-  // center of the scene stay clear). Geometry is derived from the registry each draw,
-  // so adding a type to OBJECTS.types makes it appear here automatically.
-  function paletteRect() {
-    const rowH = THUMB + 10;
-    const w = THUMB + 132; // thumbnail + label column
-    const headerH = 24, footerH = 34; // title row + (count + message) lines
-    const h = headerH + typeNames.length * rowH + footerH;
-    return { x: VW - w - 10, y: 10, w, h, rowH, headerH };
+  // palette drill-down state (remembered across [E] toggles)
+  let paletteView = "categories";           // "categories" | "types"
+  let currentCategory = null;               // the category drilled into (set before switching to "types")
+  let scrollOffset = 0;                     // px scrolled within the current list
+
+  // ---- category grouping (derived from the LIVE registry) -------------------
+  function categoryOf(name) {
+    for (const cat of Object.keys(CATEGORIES)) if (CATEGORIES[cat].includes(name)) return cat;
+    return UNCATEGORIZED; // unlisted types are still reachable, just bucketed here
   }
-  function rowRectAt(i) {
-    const pr = paletteRect();
-    return { x: pr.x + PANEL_PAD, y: pr.y + pr.headerH + i * pr.rowH, w: pr.w - PANEL_PAD * 2, h: THUMB };
+  // distinct categories that actually contain ≥1 existing type, in CATEGORIES order (misc last)
+  function groupedCategories() {
+    const order = [...Object.keys(CATEGORIES), UNCATEGORIZED];
+    const map = new Map();
+    for (const name of typeNames) {
+      const cat = categoryOf(name);
+      if (!map.has(cat)) map.set(cat, []);
+      map.get(cat).push(name);
+    }
+    return order.filter((c) => map.has(c)).map((c) => ({ name: c, types: map.get(c) }));
+  }
+  function typesInCurrentCategory() {
+    const g = groupedCategories().find((c) => c.name === currentCategory);
+    return g ? g.types : [];
+  }
+  // rows for the current view: category objects {name,types} OR type-name strings
+  function currentRows() {
+    return paletteView === "categories" ? groupedCategories() : typesInCurrentCategory();
+  }
+
+  // panel + list geometry for the current view (height grows with content, capped + scrolled)
+  function listMetrics() {
+    const rows = currentRows();
+    const backH = paletteView === "types" ? BACK_H : 0;
+    const contentH = rows.length * ROW_H;
+    const chromeH = HEADER_H + backH + FOOTER_H;
+    const panelH = Math.min(PANEL_MAX_H, chromeH + contentH);
+    const listTop = PANEL_Y + HEADER_H + backH;
+    const listBottom = PANEL_Y + panelH - FOOTER_H;
+    const listVisibleH = listBottom - listTop;
+    const maxScroll = Math.max(0, contentH - listVisibleH);
+    return { rows, backH, panelH, listTop, listBottom, listVisibleH, contentH, maxScroll };
+  }
+  function paletteRect() {
+    const m = listMetrics();
+    return { x: PANEL_X, y: PANEL_Y, w: PANEL_W, h: m.panelH };
+  }
+  function backRowRect() {
+    return { x: PANEL_X + PANEL_PAD, y: PANEL_Y + HEADER_H, w: PANEL_W - PANEL_PAD * 2, h: BACK_H };
   }
 
   function flash(text) { msg = text; msgT = MSG_TIME; }
@@ -67,10 +134,30 @@ export function createEditor({ canvas, getScene, types }) {
     e.preventDefault(); // stop the canvas starting a text/selection drag mid-edit
     const { sx, sy } = screenFromEvent(e);
 
-    // 1) palette click (screen space) only changes the active type — never places.
+    // 1) palette click (screen space): drill into a category / pick a type / go back.
+    //    Never places into the scene.
     if (pointIn(sx, sy, paletteRect())) {
-      for (let i = 0; i < typeNames.length; i++) {
-        if (pointIn(sx, sy, rowRectAt(i))) { selectedType = typeNames[i]; flash(`type: ${selectedType}`); break; }
+      const m = listMetrics();
+      // back row (types view only)
+      if (paletteView === "types" && pointIn(sx, sy, backRowRect())) {
+        paletteView = "categories"; scrollOffset = 0; flash("categories");
+        return;
+      }
+      // list rows — only count clicks landing inside the (clipped) visible list band
+      if (sy >= m.listTop && sy <= m.listBottom) {
+        for (let i = 0; i < m.rows.length; i++) {
+          const ry = m.listTop - scrollOffset + i * ROW_H;
+          const cell = { x: PANEL_X + PANEL_PAD, y: ry, w: PANEL_W - PANEL_PAD * 2, h: THUMB };
+          if (pointIn(sx, sy, cell)) {
+            if (paletteView === "categories") {
+              currentCategory = m.rows[i].name; paletteView = "types"; scrollOffset = 0;
+              flash(`category: ${currentCategory}`);
+            } else {
+              selectedType = m.rows[i]; flash(`type: ${selectedType}`);
+            }
+            break;
+          }
+        }
       }
       return;
     }
@@ -105,6 +192,17 @@ export function createEditor({ canvas, getScene, types }) {
     sc.objects.moveTo(selected, wx + dragDX, wy + dragDY);
   }
   function onUp() { dragging = false; }
+
+  // ---- mouse wheel: scroll the palette list when it overflows ---------------
+  function onWheel(e) {
+    if (!active) return;
+    const { sx, sy } = screenFromEvent(e);
+    if (!pointIn(sx, sy, paletteRect())) return; // only when the cursor is over the palette
+    const m = listMetrics();
+    if (m.maxScroll <= 0) return;                // nothing to scroll
+    scrollOffset = clamp(scrollOffset + Math.sign(e.deltaY) * WHEEL_STEP, 0, m.maxScroll);
+    e.preventDefault();
+  }
 
   // ---- keyboard: toggle / delete / export / debug ---------------------------
   function onKey(e) {
@@ -164,6 +262,7 @@ export function createEditor({ canvas, getScene, types }) {
 
   canvas.addEventListener("mousedown", onDown);
   canvas.addEventListener("mousemove", onMove);
+  canvas.addEventListener("wheel", onWheel, { passive: false }); // passive:false so we can preventDefault
   window.addEventListener("mouseup", onUp);   // catch mouseup even if it lands off-canvas
   window.addEventListener("keydown", onKey);
 
@@ -201,63 +300,124 @@ export function createEditor({ canvas, getScene, types }) {
       }
     }
 
-    // palette panel
-    const pr = paletteRect();
-    ctx.fillStyle = "rgba(0,0,0,0.72)";
-    ctx.fillRect(pr.x, pr.y, pr.w, pr.h);
-    ctx.fillStyle = CONFIG.COLORS.text;
-    ctx.font = "12px monospace";
-    ctx.textAlign = "left";
-    ctx.fillText("PALETTE", pr.x + PANEL_PAD, pr.y + 16);
-
-    for (let i = 0; i < typeNames.length; i++) {
-      const name = typeNames[i];
-      const def = types[name];
-      const r = rowRectAt(i);
-      const isSel = name === selectedType;
-
-      ctx.fillStyle = isSel ? "rgba(216,58,46,0.30)" : "rgba(255,255,255,0.05)";
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = isSel ? CONFIG.COLORS.accent : "rgba(255,255,255,0.18)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
-
-      // thumbnail (sprite scaled into the cell; blur is fine for a dev tool)
-      const rec = sc.objects.imageFor(name);
-      if (rec && rec.ready) {
-        const scale = Math.min(THUMB / def.w, THUMB / def.h);
-        const dw = def.w * scale, dh = def.h * scale;
-        ctx.drawImage(rec.img, r.x + (THUMB - dw) / 2, r.y + (THUMB - dh) / 2, dw, dh);
-      } else {
-        ctx.fillStyle = "#7a7f8a";
-        ctx.fillRect(r.x + 6, r.y + 6, THUMB - 12, THUMB - 12);
-      }
-
-      ctx.fillStyle = CONFIG.COLORS.text;
-      ctx.font = "12px monospace";
-      ctx.fillText(name, r.x + THUMB + 8, r.y + 18);
-      ctx.fillStyle = "rgba(232,232,236,0.65)";
-      ctx.font = "10px monospace";
-      ctx.fillText(`${def.w}×${def.h}`, r.x + THUMB + 8, r.y + 32);
-    }
-
-    // count + transient status under the cells
-    ctx.font = "11px monospace";
-    ctx.fillStyle = CONFIG.COLORS.text;
-    ctx.fillText(`objects: ${sc.objects.count}   sel: ${selected ? selected.type : "—"}`, pr.x + PANEL_PAD, pr.y + pr.h - 24);
-    if (msgT > 0) {
-      ctx.fillStyle = CONFIG.COLORS.accent;
-      ctx.fillText(msg, pr.x + PANEL_PAD, pr.y + pr.h - 9);
-    }
+    drawPalette(ctx, sc);
 
     // bottom-left key legend (screen space)
-    const legend = "EDITOR — [E] exit · WASD pan · click = place / drag · [Del] remove · [X] copy to clipboard · [B] footprints";
+    const legend = "EDITOR — [E] exit · WASD pan · click = place / drag · [Del] remove · [X] copy · [B] footprints · wheel = scroll";
     ctx.font = "11px monospace";
     const lw = ctx.measureText(legend).width;
     ctx.fillStyle = "rgba(0,0,0,0.72)";
     ctx.fillRect(8, VH - 26, lw + 16, 20);
     ctx.fillStyle = CONFIG.COLORS.text;
+    ctx.textAlign = "left";
     ctx.fillText(legend, 16, VH - 12);
+  }
+
+  // palette panel: header → (back row) → clipped scrolling list → scrollbar → footer
+  function drawPalette(ctx, sc) {
+    const m = listMetrics();
+    scrollOffset = clamp(scrollOffset, 0, m.maxScroll); // stay valid if content changed since last frame
+    const pr = { x: PANEL_X, y: PANEL_Y, w: PANEL_W, h: m.panelH };
+
+    ctx.fillStyle = "rgba(0,0,0,0.72)";
+    ctx.fillRect(pr.x, pr.y, pr.w, pr.h);
+
+    // header
+    ctx.fillStyle = CONFIG.COLORS.text;
+    ctx.font = "12px monospace";
+    ctx.textAlign = "left";
+    ctx.fillText(paletteView === "categories" ? "PALETTE" : `PALETTE — ${currentCategory}`, pr.x + PANEL_PAD, pr.y + 16);
+
+    // back row (types view)
+    if (paletteView === "types") {
+      const b = backRowRect();
+      ctx.fillStyle = "rgba(255,255,255,0.06)";
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth = 1;
+      ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+      ctx.fillStyle = CONFIG.COLORS.text; ctx.font = "12px monospace";
+      ctx.fillText("‹ back to categories", b.x + 6, b.y + 15);
+    }
+
+    // scrolling list, clipped to the region between the (back) header and the footer
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(pr.x, m.listTop, pr.w, m.listVisibleH);
+    ctx.clip();
+
+    for (let i = 0; i < m.rows.length; i++) {
+      const ry = m.listTop - scrollOffset + i * ROW_H;
+      if (ry + THUMB < m.listTop || ry > m.listBottom) continue; // off-view → skip
+      const r = { x: pr.x + PANEL_PAD, y: ry, w: pr.w - PANEL_PAD * 2, h: THUMB };
+
+      if (paletteView === "categories") {
+        const cat = m.rows[i]; // { name, types:[...] }
+        ctx.fillStyle = "rgba(255,255,255,0.05)";
+        ctx.fillRect(r.x, r.y, r.w, r.h);
+        ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth = 1;
+        ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+
+        // icon: the first member type's thumbnail (so the category reads at a glance)
+        const iconType = cat.types[0];
+        const def = iconType ? types[iconType] : null;
+        const rec = iconType ? sc.objects.imageFor(iconType) : null;
+        if (rec && rec.ready && def) {
+          const scale = Math.min(THUMB / def.w, THUMB / def.h);
+          const dw = def.w * scale, dh = def.h * scale;
+          ctx.drawImage(rec.img, r.x + (THUMB - dw) / 2, r.y + (THUMB - dh) / 2, dw, dh);
+        } else {
+          ctx.fillStyle = "#7a7f8a";
+          ctx.fillRect(r.x + 6, r.y + 6, THUMB - 12, THUMB - 12);
+        }
+
+        ctx.fillStyle = CONFIG.COLORS.text; ctx.font = "12px monospace";
+        ctx.fillText(cat.name, r.x + THUMB + 8, r.y + 18);
+        ctx.fillStyle = "rgba(232,232,236,0.65)"; ctx.font = "10px monospace";
+        ctx.fillText(`${cat.types.length} item${cat.types.length === 1 ? "" : "s"} ›`, r.x + THUMB + 8, r.y + 32);
+      } else {
+        const name = m.rows[i];
+        const def = types[name];
+        const isSel = name === selectedType;
+
+        ctx.fillStyle = isSel ? "rgba(216,58,46,0.30)" : "rgba(255,255,255,0.05)";
+        ctx.fillRect(r.x, r.y, r.w, r.h);
+        ctx.strokeStyle = isSel ? CONFIG.COLORS.accent : "rgba(255,255,255,0.18)"; ctx.lineWidth = 1;
+        ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+
+        const rec = sc.objects.imageFor(name);
+        if (rec && rec.ready) {
+          const scale = Math.min(THUMB / def.w, THUMB / def.h);
+          const dw = def.w * scale, dh = def.h * scale;
+          ctx.drawImage(rec.img, r.x + (THUMB - dw) / 2, r.y + (THUMB - dh) / 2, dw, dh);
+        } else {
+          ctx.fillStyle = "#7a7f8a";
+          ctx.fillRect(r.x + 6, r.y + 6, THUMB - 12, THUMB - 12);
+        }
+
+        ctx.fillStyle = CONFIG.COLORS.text; ctx.font = "12px monospace";
+        ctx.fillText(name, r.x + THUMB + 8, r.y + 18);
+        ctx.fillStyle = "rgba(232,232,236,0.65)"; ctx.font = "10px monospace";
+        ctx.fillText(`${def.w}×${def.h}`, r.x + THUMB + 8, r.y + 32);
+      }
+    }
+    ctx.restore(); // end clip
+
+    // scrollbar hint when the list overflows
+    if (m.maxScroll > 0) {
+      const trackX = pr.x + pr.w - 4;
+      const thumbH = Math.max(20, m.listVisibleH * (m.listVisibleH / m.contentH));
+      const thumbY = m.listTop + (m.listVisibleH - thumbH) * (scrollOffset / m.maxScroll);
+      ctx.fillStyle = "rgba(255,255,255,0.10)"; ctx.fillRect(trackX, m.listTop, 3, m.listVisibleH);
+      ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.fillRect(trackX, thumbY, 3, thumbH);
+    }
+
+    // footer: object count + current selection, then the transient status line
+    ctx.font = "11px monospace"; ctx.textAlign = "left"; ctx.fillStyle = CONFIG.COLORS.text;
+    ctx.fillText(`objects: ${sc.objects.count}   sel: ${selected ? selected.type : (selectedType || "—")}`, pr.x + PANEL_PAD, pr.y + pr.h - 24);
+    if (msgT > 0) {
+      ctx.fillStyle = CONFIG.COLORS.accent;
+      ctx.fillText(msg, pr.x + PANEL_PAD, pr.y + pr.h - 9);
+    }
   }
 
   return {
