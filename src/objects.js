@@ -3,19 +3,22 @@
 // collision — just its base, not a whole tile. Objects + player are y-sorted in the scene so
 // the Iju passes behind taller objects. Data lives in CONFIG.OBJECTS:
 //   types[name]  = { sprite, w, h, anchorY, fpW, fpH, solid?, ground? }  // registry (SHARED by all scenes)
-//   placements[] = { type, x, y }                                        // x,y = world top-left of sprite
+//   placements[] = { type, x, y, solid?, door? }                        // x,y = world top-left of sprite
 //
 // solid/ground (both default off the obvious way):
 //   • default            → SOLID + y-sorted (a normal prop/building).
-//   • solid: false       → no collision, still y-sorted (a walk-BEHIND prop, e.g. a tall banner).
+//   • type solid: false  → no collision, still y-sorted (a walk-BEHIND prop, e.g. a tall banner).
+//   • placement solid:   → (optional, true|false) OVERRIDES the type default for that ONE object,
+//                          so the editor's [F] key can make a single prop walk-through (or solid)
+//                          without changing the type. Ground decals ignore it (always non-solid).
 //   • ground: true       → a flat GROUND DECAL: draws beneath every y-sorted entity and never
 //                          collides (implies non-solid). This is how stone paths / stains /
 //                          fallen leaves get placed via the editor without blocking movement.
 //
 // createObjects(placements) takes an OPTIONAL placement list so each scene can have its own
 // objects (town uses CONFIG.OBJECTS.placements by default; pickup passes CONFIG.PICKUP.placements).
-// The type registry is shared. The list is MUTABLE at runtime so the editor can add/move/delete
-// and rebuild() regenerates the draw + collision data.
+// The type registry is shared. The list is MUTABLE at runtime so the editor can add/move/delete/
+// toggle and rebuild() regenerates the draw + collision data.
 
 import { CONFIG } from "./config.js";
 
@@ -28,6 +31,7 @@ export function createObjects(placementsInput) {
   const types = O.types || {};
 
   // Working COPY of the chosen placement list, so editing never mutates the CONFIG literal.
+  // Spread keeps every field (incl. `solid` / `door`), so a saved override survives the copy.
   // Never reassigned (only push/splice/in-place edits), so getPlacements() stays valid.
   const placements = (placementsInput || O.placements || []).map((p) => ({ ...p }));
 
@@ -53,6 +57,13 @@ export function createObjects(placementsInput) {
   const solids = []; // foot rects {x,y,w,h} in world space — used by collision
   const items = [];  // drawables {sortY, draw(ctx,camX,camY)} — used by y-sorted render
 
+  // Effective solidity of one placement: ground decals never collide; otherwise a per-placement
+  // `solid` override wins, falling back to the type default (solid unless the type opts out).
+  function isSolidPlacement(place, def) {
+    if (def.ground === true) return false;
+    return place.solid ?? (def.solid !== false);
+  }
+
   function rebuild() {
     items.length = 0;
     solids.length = 0;
@@ -62,10 +73,10 @@ export function createObjects(placementsInput) {
       const rec = spriteFor(def);
       const x = place.x, y = place.y;
 
-      // A `ground` decal is flat and never collides. Anything else is solid UNLESS it opts out
-      // with solid:false. (Ground implies non-solid, so it wins regardless of a stray solid flag.)
+      // A `ground` decal is flat and never collides. Anything else is solid UNLESS the type
+      // opts out (solid:false) OR this specific placement overrides it (place.solid:false).
       const isGround = def.ground === true;
-      const isSolid = def.solid !== false && !isGround;
+      const isSolid = isSolidPlacement(place, def);
 
       // Only solids carry a footprint into collision.
       let foot = null;
@@ -146,6 +157,16 @@ export function createObjects(placementsInput) {
     place.y = Math.round(y);
     rebuild();
   }
+  // Flip this ONE placement's solid override against the type default, then rebuild so collision
+  // + draw pick it up. Ground decals are always non-solid → no-op (returns null). Returns the new
+  // effective solidity (true|false). The override persists through the editor's [X] export.
+  function toggleSolid(place) {
+    const def = types[place.type];
+    if (!def || def.ground === true) return null;
+    place.solid = !isSolidPlacement(place, def);
+    rebuild();
+    return place.solid;
+  }
   function imageFor(type) {
     const def = types[type];
     return def ? spriteFor(def) : null;
@@ -155,7 +176,7 @@ export function createObjects(placementsInput) {
 
   return {
     items, solids, blocks, rebuild,
-    hitTest, add, remove, moveTo, imageFor,
+    hitTest, add, remove, moveTo, toggleSolid, imageFor,
     getPlacements: () => placements,
     get count() { return items.length; },
   };

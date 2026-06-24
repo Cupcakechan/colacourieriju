@@ -3,7 +3,8 @@
 // scene, click-drag to move, [Del] to remove, [X] to copy the whole placements list
 // to the clipboard (paste it into OBJECTS.placements in config.js). Pan the camera
 // with WASD/Arrows while editing; [B] toggles the footprint overlay; mouse-wheel
-// scrolls the palette list. HOLD SHIFT while placing or dragging to snap to the grid.
+// scrolls the palette list. HOLD SHIFT while placing or dragging to snap to the grid;
+// [F] toggles whether the SELECTED object collides (a per-object override; see "SOLID" below).
 //
 // PALETTE — drill-down: the panel first shows CATEGORIES; click one to see the objects
 // tagged with it (plus a "‹ back" row). Categories are defined HERE in CATEGORIES (a
@@ -15,6 +16,12 @@
 // feet) onto a GRID_SNAP grid. Bases (not top-lefts) snap, so objects of different sizes
 // line up where they sit — which is what reads as a clean row/column in a y-sorted view.
 // A faint grid is drawn while Shift is held so you can see the lattice you're snapping to.
+//
+// SOLID — [F] flips the SELECTED placement between solid and walk-through (still y-sorted), as a
+// per-OBJECT override of its type default. Use it for a one-off decoration (a flower you can walk
+// over) without adding a new type. The override exports with [X] and persists. The selected
+// object's outline is WHITE when solid, BLUE when walk-through. (For a whole KIND that never
+// collides, set solid:false on the TYPE in config.js instead.)
 //
 // Scene-aware: instead of fixed references it reads the ACTIVE scene's camera/objects/map
 // through getScene(), so one editor instance follows whatever scene is current (the
@@ -256,6 +263,16 @@ export function createEditor({ canvas, getScene, types }) {
       CONFIG.OBJECTS.debugFootprints = !CONFIG.OBJECTS.debugFootprints; // live toggle, read by objects + player
       flash(`debug ${CONFIG.OBJECTS.debugFootprints ? "ON" : "OFF"}`);
       e.preventDefault();
+    } else if (e.code === "KeyF") {
+      // flip the SELECTED object's collision (per-placement override; ground decals can't be solid)
+      if (!selected) {
+        flash("select an object first ([F] toggles its collision)");
+      } else {
+        const sc = getScene();
+        const res = sc && sc.objects && sc.objects.toggleSolid ? sc.objects.toggleSolid(selected) : null;
+        flash(res === null ? `${selected.type}: always non-solid` : `${selected.type} solid ${res ? "ON" : "OFF"}`);
+      }
+      e.preventDefault();
     }
   }
   function onKeyUp(e) {
@@ -272,8 +289,9 @@ export function createEditor({ canvas, getScene, types }) {
     // Preserve a hand-added `door:{to,spawn}` on a placement so re-exporting during layout
     // doesn't silently drop an object-anchored teleporter. (x,y come from the live placement.)
     const lines = ps.map((p) => {
+      const solid = p.solid !== undefined ? `, solid: ${p.solid}` : ""; // keep per-object [F] override
       const door = p.door ? `, door: ${JSON.stringify(p.door)}` : "";
-      return `      { type: "${p.type}", x: ${Math.round(p.x)}, y: ${Math.round(p.y)}${door} },`;
+      return `      { type: "${p.type}", x: ${Math.round(p.x)}, y: ${Math.round(p.y)}${solid}${door} },`;
     });
     const block = `placements: [\n${lines.join("\n")}\n    ],`;
     console.log("// ---- paste into OBJECTS.placements in config.js ----\n" + block);
@@ -315,11 +333,13 @@ export function createEditor({ canvas, getScene, types }) {
 
     if (shiftHeld) drawSnapGrid(ctx, sc); // faint lattice you're snapping to (under the highlight/HUD)
 
-    // highlight the grabbed object (world -> screen via the camera offset)
+    // highlight the grabbed object (world -> screen). Outline shows its collision state:
+    // WHITE = solid, BLUE = walk-through (so the [F] toggle reads at a glance, even with [B] off).
     if (selected) {
       const def = types[selected.type];
       if (def) {
-        ctx.strokeStyle = "rgba(255,255,255,0.95)";
+        const walkThrough = def.ground === true || (selected.solid ?? (def.solid !== false)) === false;
+        ctx.strokeStyle = walkThrough ? "rgba(120,200,255,0.95)" : "rgba(255,255,255,0.95)";
         ctx.lineWidth = 2;
         ctx.strokeRect(
           Math.floor(selected.x - sc.camera.cam.x) + 0.5,
@@ -332,7 +352,7 @@ export function createEditor({ canvas, getScene, types }) {
     drawPalette(ctx, sc);
 
     // bottom-left key legend (screen space)
-    const legend = "EDITOR — [E] exit · WASD pan · click = place / drag · Shift = snap · [Del] remove · [X] copy · [B] footprints · wheel = scroll";
+    const legend = "EDITOR — [E] exit · WASD pan · click = place / drag · Shift = snap · [F] solid · [Del] remove · [X] copy · [B] footprints · wheel = scroll";
     ctx.font = "11px monospace";
     const lw = ctx.measureText(legend).width;
     ctx.fillStyle = "rgba(0,0,0,0.72)";
