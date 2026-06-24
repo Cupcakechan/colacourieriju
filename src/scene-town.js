@@ -51,7 +51,7 @@ export function createTownScene(opts = {}) {
     npcs = createNpcs({ map, objects });
     ijuFx = createAnimator(CONFIG.IJU_FX);
     ui = createUI();
-    doors = createDoorController("town");
+    doors = createDoorController("town", objects); // objects → object-anchored doors (cola shop entrance)
   }
 
   function update(dt, input) {

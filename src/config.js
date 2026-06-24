@@ -44,14 +44,23 @@ export const CONFIG = {
     jumpFps: 14,
   },
 
-  // --- World objects (props, buildings) -------------------------------------
+  // --- World objects (props, buildings, ground decals) ----------------------
   // types: the registry — art + footprint per object kind (SHARED across all scenes).
-  //   w,h     = sprite draw size (MUST equal the PNG's native size, or it draws blurry)
-  //   anchorY = sprite-local y where the object meets the ground (its "feet")
-  //   fpW,fpH = the SOLID contact band; centered on the sprite, resting on anchorY
+  //   w,h       = sprite draw size (MUST equal the PNG's native size, or it draws blurry)
+  //   anchorY   = sprite-local y where the object meets the ground (its "feet")
+  //   fpW,fpH   = the SOLID contact band; centered on the sprite, resting on anchorY
+  //   solid     = (optional) false → no collision, still y-sorted (a walk-BEHIND prop)
+  //   ground    = (optional) true  → a flat decal: drawn UNDER every entity + never collides
+  //               (stone paths / stains). No anchorY/fpW/fpH needed.
+  //   entrance  = (optional) {offX,offY,w,h} a doorway rect (sprite-local) in the WALKABLE strip
+  //               in front of the base; with a placement `door` field it becomes a live teleporter.
   // placements: the TOWN's objects — x,y is the world TOP-LEFT of each sprite.
-  //   Open the editor with [E] to place visually, then [X] to export this block.
-  // debugFootprints: yellow = wall box, cyan = the Iju's foot box, red = object base, magenta = NPC foot.
+  //   door      = (optional) {to,spawn,label?} on a placement → an OBJECT-ANCHORED teleporter that
+  //               rides this building (rect = its position + the type's `entrance`). spawn is a
+  //               point in the TARGET scene (frame TOP-LEFT).
+  //   Open the editor with [E] to place visually, then [X] to export this block (door fields kept).
+  // debugFootprints: yellow = wall box, cyan = the Iju's foot box, red = object base / door zones,
+  //   magenta = NPC foot.
   OBJECTS: {
     debugFootprints: true,
     types: {
@@ -60,18 +69,23 @@ export const CONFIG = {
       teahouse:   { sprite: "assets/sprites/teahouse.png",   w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
       disheveled: { sprite: "assets/sprites/disheveled.png", w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
       house1:     { sprite: "assets/sprites/house1.png",     w: 256, h: 256, anchorY: 235, fpW: 190, fpH: 35 },
-      yokaisoda:     { sprite: "assets/sprites/yokaihouse.png",     w: 256, h: 256, anchorY: 235, fpW: 290, fpH: 35 },
-
-      // Large building (384×256): base spans most of the width — GDD large ≈ 290.
+      // Cola shop / depot (384×256). entrance = the doorway zone in the walkable strip below the
+      // base; paired with the placement's `door` field it teleports to the depot. Tune with [B].
+      yokaihouse: { sprite: "assets/sprites/yokaihouse.png", w: 384, h: 256, anchorY: 255, fpW: 190, fpH: 35,
+                    entrance: { offX: 140, offY: 255, w: 104, h: 44 } },
       // Small props (40×40): base band near bottom-center. STARTING values — verify with [B].
       stonelantern: { sprite: "assets/sprites/stonelantern.png", w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
       mossyrock:    { sprite: "assets/sprites/mossyrock.png",    w: 40, h: 40, anchorY: 36, fpW: 24, fpH: 10 },
+      // Ground decal: walkable + drawn under everything. Place paths freely with the editor.
+      stonepath:    { sprite: "assets/sprites/stonepath.png",    w: 32, h: 32, ground: true },
     },
     placements: [
       { type: "temple", x: 939, y: 343 },
       { type: "teahouse", x: 685, y: 343 },
       { type: "mossyrock", x: 1260, y: 800 },
-      { type: "yokaisoda", x: 1276, y: 603 },
+      // The cola shop is the depot teleporter: walking into its entrance → the pickup scene.
+      // The trigger rides this building, so move it freely during layout — no door coord to sync.
+      { type: "yokaihouse", x: 19, y: 21, door: { to: "pickup", spawn: { x: 336, y: 224 } } },
       { type: "stonelantern", x: 1207, y: 546 },
     ],
   },
@@ -119,17 +133,19 @@ export const CONFIG = {
   },
 
   // --- Doors: per-scene transition zones -------------------------------------
-  // Each: { rect (world px), to (target scene), spawn (a point in the TARGET scene,
-  // frame TOP-LEFT), label }. Walking the Iju's foot box into rect triggers the swap.
-  // Depot is a walled 24×16 room (interior ≈ x32–736, y32–480). Placeholders — nudge to suit;
-  // the depot door becomes the building's entrance once we do the object-anchored teleporter.
+  // STATIC doors live here; OBJECT-ANCHORED doors come from a placement's `door` field (above).
+  // Each static door: { rect (world px), to, spawn (TARGET-scene frame TOP-LEFT), label }.
+  // Depot is a walled 24×16 room (interior ≈ x32–736, y32–480).
+  //   pickup → town: static gate at the bottom-center of the depot room.
+  //   town → pickup: now provided by the cola shop's object-anchored entrance, so this is empty.
+  // NOTE: the pickup→town `spawn` (where you land in town) is a fixed point for now (Option 2).
+  //   Once the cola shop's final spot is locked, set it to the shop's front — or we add the
+  //   symmetric auto-return (land in front of the shop) as a small follow-up.
   DOORS: {
     pickup: [
       { rect: { x: 320, y: 416, w: 128, h: 48 }, to: "town", spawn: { x: 470, y: 470 }, label: "to town" },
     ],
-    town: [
-      { rect: { x: 470, y: 600, w: 70, h: 56 }, to: "pickup", spawn: { x: 336, y: 224 }, label: "to depot" },
-    ],
+    town: [],
   },
 
   // --- Colors ---

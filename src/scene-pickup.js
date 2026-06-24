@@ -30,7 +30,7 @@ export function createPickupScene(opts = {}) {
     const sp = opts.spawnAt || { x: map.width / 2 - 32, y: map.height / 2 - 32 };
     player = createPlayer(sp.x, sp.y); // arrive at the gate the manager handed us (or center)
     objects = createObjects(P.placements); // pickup's OWN placements (shared type registry)
-    doors = createDoorController("pickup");
+    doors = createDoorController("pickup", objects); // objects → object-anchored doors (future depot building)
   }
 
   function update(dt, input) {

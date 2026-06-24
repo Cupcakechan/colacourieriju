@@ -81,9 +81,11 @@ export function createEditor({ canvas, getScene, types }) {
     if (hit) {
       selected = hit;
     } else if (selectedType) {
-      // place so the object's BASE (centered on anchorY) lands under the cursor
+      // Place so the object's BASE (anchorY) lands under the cursor. Ground decals carry no
+      // anchorY, so fall back to the sprite center — without this guard, `wy - undefined` is
+      // NaN and the decal is placed off into NaN-land (counted, but drawn nowhere).
       const def = types[selectedType];
-      selected = sc.objects.add(selectedType, wx - def.w / 2, wy - def.anchorY);
+      selected = sc.objects.add(selectedType, wx - def.w / 2, wy - (def.anchorY ?? def.h / 2));
       flash(`+${selectedType}`);
     } else {
       selected = null;
@@ -143,7 +145,12 @@ export function createEditor({ canvas, getScene, types }) {
     const sc = getScene();
     if (!sc || !sc.objects) return;
     const ps = sc.objects.getPlacements();
-    const lines = ps.map((p) => `      { type: "${p.type}", x: ${Math.round(p.x)}, y: ${Math.round(p.y)} },`);
+    // Preserve a hand-added `door:{to,spawn}` on a placement so re-exporting during layout
+    // doesn't silently drop an object-anchored teleporter. (x,y come from the live placement.)
+    const lines = ps.map((p) => {
+      const door = p.door ? `, door: ${JSON.stringify(p.door)}` : "";
+      return `      { type: "${p.type}", x: ${Math.round(p.x)}, y: ${Math.round(p.y)}${door} },`;
+    });
     const block = `placements: [\n${lines.join("\n")}\n    ],`;
     console.log("// ---- paste into OBJECTS.placements in config.js ----\n" + block);
     const done = () => flash(`copied ${ps.length} placements`);
