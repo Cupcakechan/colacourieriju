@@ -52,7 +52,7 @@ const GRID_SNAP = 16;        // hold-Shift snap grid, world px. Set to 32 to sna
 // A type missing from every list shows under "misc". Listing a name that doesn't exist in
 // the registry is harmless (it's simply skipped), so expected-soon props can be pre-listed.
 const CATEGORIES = {
-  buildings: ["temple", "teahouse", "disheveled", "house1", "yokaihouse"],
+  buildings: ["temple", "teahouse", "disheveled", "house1", "yokaihouse", "bathhouse", "herbshop", "noodleshop", "smallhut"],
   cola:      ["crates", "colacrate", "stackedcolas", "table"],
   nature:    ["mossyrock", "stonelantern"],
   ground:    ["stonepath"],
